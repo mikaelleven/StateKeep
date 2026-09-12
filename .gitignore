@@ -1,2 +1,5 @@
 [Bb]in/
 [Oo]bj/
+releases/
+__pycache__/
+*.py[cod]

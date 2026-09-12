@@ -8,6 +8,10 @@
     <RootNamespace>StateKeep</RootNamespace>
   </PropertyGroup>
 
+  <Target Name="BumpBuildVersion" BeforeTargets="BeforeBuild" Condition="'$(VersionBumpHandled)' != 'true'">
+    <Exec Command="python &quot;$(MSBuildProjectDirectory)\..\..\scripts\version.py&quot; bump build" />
+  </Target>
+
   <ItemGroup>
     <Content Include="../../apps/**/*.yaml" LinkBase="apps" CopyToOutputDirectory="PreserveNewest" />
     <Content Include="../../apps/**/*.yml" LinkBase="apps" CopyToOutputDirectory="PreserveNewest" />
