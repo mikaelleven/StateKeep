@@ -310,7 +310,9 @@ internal static class Program
                     var files = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories)
                         .Where(file => MatchesFilters(Path.GetRelativePath(source, file), app.Include, app.Exclude))
                         .ToArray();
-                    var destination = Path.Combine(backupRoot, app.Id, root.Name);
+                    var destination = app.Roots.Count == 1
+                        ? Path.Combine(backupRoot, app.Id)
+                        : Path.Combine(backupRoot, app.Id, root.Name);
                     foreach (var file in files)
                     {
                         var relative = Path.GetRelativePath(source, file);

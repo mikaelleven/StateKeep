@@ -200,10 +200,13 @@ include:
 
 ## 7. Backup layout
 
-Each selected root is stored below its application ID and logical root name. Relative paths below the selected root are preserved.
+A single selected root is stored directly below its application ID. When an application has multiple roots, each root is stored below its logical root name. Relative paths below the selected root are preserved.
 
 ```text
-apps\raw-accel\
+apps\single-root-app\
+└── ...
+
+apps\multi-root-app\
 ├── installation\
 │   └── ...
 └── user-data\
