@@ -310,7 +310,12 @@ internal static class Program
                         continue;
                     }
 
-                    var files = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories)
+                    var files = Directory.EnumerateFiles(source, "*", new EnumerationOptions
+                        {
+                            RecurseSubdirectories = true,
+                            IgnoreInaccessible = true,
+                            AttributesToSkip = FileAttributes.ReparsePoint
+                        })
                         .Where(file => MatchesFilters(Path.GetRelativePath(source, file), app.Include, app.Exclude))
                         .ToArray();
                     var destination = app.Roots.Count == 1
@@ -325,7 +330,11 @@ internal static class Program
                             continue;
                         }
 
-                        spinner.Detail(relative);
+                        if (arguments.Verbose)
+                        {
+                            spinner.Detail(relative);
+                        }
+
                         if (arguments.Verbose && arguments.DryRun)
                         {
                             spinner.WouldCopy(relative);
@@ -528,9 +537,13 @@ internal static class Program
 
     private sealed class ProgressLine
     {
+        private static readonly string[] SpinnerFrames = ["|", "/", "-", "\\"];
+        private readonly object consoleLock = new();
         private readonly bool silent;
         private readonly string label;
         private readonly bool persist;
+        private CancellationTokenSource? refreshCancellation;
+        private Thread? refreshThread;
         private bool hasDetail;
         private int outputFileCount;
 
@@ -543,16 +556,31 @@ internal static class Program
 
         public void Start()
         {
-            if (!silent)
+            if (silent)
             {
-                if (persist)
+                return;
+            }
+
+            refreshCancellation = new CancellationTokenSource();
+            refreshThread = new Thread(() => Refresh(refreshCancellation.Token))
+            {
+                IsBackground = true
+            };
+            refreshThread.Start();
+        }
+
+        private void Refresh(CancellationToken cancellationToken)
+        {
+            var frame = 0;
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                lock (consoleLock)
                 {
-                    Console.Write($"| {label}");
+                    Console.Write($"\r\u001b[2K{SpinnerFrames[frame]} {label}");
                 }
-                else
-                {
-                    Console.Write($"| {label}");
-                }
+
+                frame = (frame + 1) % SpinnerFrames.Length;
+                cancellationToken.WaitHandle.WaitOne(100);
             }
         }
 
@@ -560,15 +588,18 @@ internal static class Program
         {
             if (!silent)
             {
-                if (hasDetail || outputFileCount > 0)
+                lock (consoleLock)
                 {
-                    Console.Write($"\r\u001b[2K  Scanning file {text}");
-                }
-                else
-                {
-                    hasDetail = true;
-                    Console.WriteLine();
-                    Console.Write($"  Scanning file {text}");
+                    if (hasDetail || outputFileCount > 0)
+                    {
+                        Console.Write($"\r\u001b[2K  Scanning file {text}");
+                    }
+                    else
+                    {
+                        hasDetail = true;
+                        Console.WriteLine();
+                        Console.Write($"  Scanning file {text}");
+                    }
                 }
             }
         }
@@ -577,9 +608,12 @@ internal static class Program
         {
             if (!silent)
             {
-                Console.Write($"\r\u001b[2K  Would copy {relativePath}\n");
-                hasDetail = false;
-                outputFileCount++;
+                lock (consoleLock)
+                {
+                    Console.Write($"\r\u001b[2K  Would copy {relativePath}\n");
+                    hasDetail = false;
+                    outputFileCount++;
+                }
             }
         }
 
@@ -587,57 +621,79 @@ internal static class Program
         {
             if (!silent)
             {
-                Console.Write($"\r\u001b[2K  file {relativePath} copied\n");
-                hasDetail = false;
-                outputFileCount++;
+                lock (consoleLock)
+                {
+                    Console.Write($"\r\u001b[2K  file {relativePath} copied\n");
+                    hasDetail = false;
+                    outputFileCount++;
+                }
             }
         }
 
         public void Complete(bool ok, string text)
         {
+            StopRefresh();
             if (silent)
             {
                 return;
             }
 
-            if (!persist)
+            lock (consoleLock)
             {
+                if (!persist)
+                {
+                    if (hasDetail)
+                    {
+                        // Remove the temporary detail line and the root spinner line.
+                        Console.Write("\r\u001b[2K\u001b[1A\r\u001b[2K\n");
+                    }
+                    else
+                    {
+                        Console.Write("\r\u001b[2K");
+                    }
+
+                    return;
+                }
+
+                var result = $"{(ok ? "✓" : "✗")} {label}: {text}";
                 if (hasDetail)
                 {
-                    // Remove the temporary detail line and the root spinner line.
-                    Console.Write("\r\u001b[2K\u001b[1A\r\u001b[2K\n");
-                }
-                else
-                {
+                    // Clear the temporary scan line before writing the final line below it.
                     Console.Write("\r\u001b[2K");
                 }
 
+                if (outputFileCount > 0)
+                {
+                    // Replace the spinner, then leave the cursor below persistent per-file
+                    // messages for the per-app result.
+                    var linesToSpinner = outputFileCount + 1;
+                    Console.Write($"\u001b[{linesToSpinner}A\r\u001b[2K{result}\u001b[{linesToSpinner}B\r");
+                }
+                else if (hasDetail)
+                {
+                    // Replace the spinner and leave the cursor below it for the app result.
+                    Console.Write($"\u001b[1A\r\u001b[2K{result}\u001b[1B\r");
+                }
+                else
+                {
+                    Console.Write($"\r\u001b[2K{result}\n");
+                }
+            }
+        }
+
+        private void StopRefresh()
+        {
+            var cancellation = refreshCancellation;
+            if (cancellation is null)
+            {
                 return;
             }
 
-            var result = $"{(ok ? "✓" : "✗")} {label}: {text}";
-            if (hasDetail)
-            {
-                // Clear the temporary scan line before writing the final line below it.
-                Console.Write("\r\u001b[2K");
-            }
-
-            if (outputFileCount > 0)
-            {
-                // Replace the spinner, then leave the cursor below persistent per-file
-                // messages for the per-app result.
-                var linesToSpinner = outputFileCount + 1;
-                Console.Write($"\u001b[{linesToSpinner}A\r\u001b[2K{result}\u001b[{linesToSpinner}B\r");
-            }
-            else if (hasDetail)
-            {
-                // Replace the spinner and leave the cursor below it for the app result.
-                Console.Write($"\u001b[1A\r\u001b[2K{result}\u001b[1B\r");
-            }
-            else
-            {
-                Console.Write($"\r\u001b[2K{result}\n");
-            }
+            cancellation.Cancel();
+            refreshThread?.Join();
+            cancellation.Dispose();
+            refreshCancellation = null;
+            refreshThread = null;
         }
     }
 
