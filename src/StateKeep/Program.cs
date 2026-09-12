@@ -314,17 +314,23 @@ internal static class Program
                     foreach (var file in files)
                     {
                         var relative = Path.GetRelativePath(source, file);
+                        var target = Path.Combine(destination, relative);
+                        if (!FileNeedsUpdate(file, target))
+                        {
+                            continue;
+                        }
+
                         spinner.Detail(relative);
                         if (arguments.Verbose && arguments.DryRun)
                         {
                             spinner.WouldCopy(relative);
                         }
 
-                        var target = Path.Combine(destination, relative);
                         if (!arguments.DryRun)
                         {
                             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                             File.Copy(file, target, true);
+                            File.SetLastWriteTimeUtc(target, File.GetLastWriteTimeUtc(file));
                             if (arguments.Verbose)
                             {
                                 spinner.FileCopied(relative);
@@ -332,7 +338,7 @@ internal static class Program
                         }
                         appCopied++;
                     }
-                    spinner.Complete(true, $"{appCopied} file{(appCopied == 1 ? "" : "s")} found");
+                    spinner.Complete(true, $"{files.Length} file{(files.Length == 1 ? "" : "s")} found");
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
@@ -354,6 +360,19 @@ internal static class Program
             Console.WriteLine($"Completed: {scanned} apps scanned, {successful} successful, {(arguments.DryRun ? $"{copied} files would have been copied" : $"{copied} files copied")}.");
         }
         return successful == scanned ? Success : 1;
+    }
+
+    private static bool FileNeedsUpdate(string source, string target)
+    {
+        if (!File.Exists(target))
+        {
+            return true;
+        }
+
+        var sourceInfo = new FileInfo(source);
+        var targetInfo = new FileInfo(target);
+        return sourceInfo.Length != targetInfo.Length
+            || sourceInfo.LastWriteTimeUtc != targetInfo.LastWriteTimeUtc;
     }
 
     private static BackupDefinition ReadBackupDefinition(string path)
