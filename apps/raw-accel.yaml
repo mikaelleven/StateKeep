@@ -3,22 +3,11 @@ id: raw-accel
 name: Raw Accel
 
 roots:
-  - name: installation
-    path: "%PROGRAMFILES%\\Raw Accel"
-    evidence:
-      any:
-        - file: "settings.json"
-        - file: ".config"
-
-  - name: programs
-    path: "C:\\Programs\\RawAccel"
-    evidence:
-      any:
-        - file: "settings.json"
-        - file: ".config"
-
-  - name: local-programs
-    path: "%LOCALAPPDATA%\\Programs\\RawAccel"
+  - name: user-data
+    path:
+      - "%PROGRAMFILES%\\Raw Accel"
+      - "%LOCALAPPDATA%\\Programs\\RawAccel"
+      - "C:\\Programs\\RawAccel"
     evidence:
       any:
         - file: "settings.json"

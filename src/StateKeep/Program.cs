@@ -291,7 +291,6 @@ internal static class Program
             var failed = false;
             foreach (var root in app.Roots)
             {
-                var source = Environment.ExpandEnvironmentVariables(root.Path);
                 var spinner = new ProgressLine(
                     arguments.Silent,
                     $"Scanning {app.Name} ({root.Name})",
@@ -299,7 +298,10 @@ internal static class Program
                 try
                 {
                     spinner.Start();
-                    if (!Directory.Exists(source) || !EvidenceMatches(source, root.Evidence))
+                    var source = root.Paths
+                        .Select(path => Environment.ExpandEnvironmentVariables(path))
+                        .FirstOrDefault(path => Directory.Exists(path) && EvidenceMatches(path, root.Evidence));
+                    if (source is null)
                     {
                         spinner.Complete(false, "not found");
                         continue;
@@ -356,22 +358,96 @@ internal static class Program
         var name = lines.Select(line => Regex.Match(line, @"^\s*name\s*:\s*(.+)$")).FirstOrDefault(m => m.Success)?.Groups[1].Value.Trim();
         var roots = new List<BackupRoot>();
         string? rootName = null;
-        string? rootPath = null;
-        var evidence = new List<string>();
+        var paths = new List<string>();
+        EvidenceGroup? evidence = null;
+        EvidencePredicate? pendingFileContains = null;
+        var pathList = false;
+
+        void FlushEvidencePredicate()
+        {
+            if (evidence is null || pendingFileContains is null) return;
+            evidence.Predicates.Add(pendingFileContains);
+            pendingFileContains = null;
+        }
+
+        void FlushRoot()
+        {
+            FlushEvidencePredicate();
+            if (rootName is not null && paths.Count > 0)
+                roots.Add(new BackupRoot(rootName, paths.ToArray(), evidence));
+            rootName = null;
+            paths = new List<string>();
+            evidence = null;
+            pathList = false;
+        }
+
         foreach (var line in lines.Append("- __end__"))
         {
             var root = Regex.Match(line, @"^\s*- name:\s*(.+)$");
-            var pathMatch = Regex.Match(line, @"^\s*path:\s*(.+)$");
-            var evidenceMatch = Regex.Match(line, @"^\s*- file:\s*[""']?([^""']+)[""']?\s*$");
             if (root.Success)
             {
-                if (rootName is not null && rootPath is not null) roots.Add(new BackupRoot(rootName, Unquote(rootPath), evidence.ToArray()));
-                rootName = Unquote(root.Groups[1].Value.Trim()); rootPath = null; evidence.Clear();
+                FlushRoot();
+                rootName = Unquote(root.Groups[1].Value.Trim());
+                continue;
             }
-            else if (pathMatch.Success && rootName is not null) rootPath = pathMatch.Groups[1].Value.Trim();
-            else if (evidenceMatch.Success && rootName is not null) evidence.Add(Unquote(evidenceMatch.Groups[1].Value.Trim()));
+
+            if (rootName is null) continue;
+            var scalarPath = Regex.Match(line, @"^\s{4}path:\s*(.+)$");
+            if (scalarPath.Success)
+            {
+                paths.Add(Unquote(scalarPath.Groups[1].Value.Trim()));
+                pathList = false;
+                continue;
+            }
+            if (Regex.IsMatch(line, @"^\s{4}path:\s*$"))
+            {
+                pathList = true;
+                continue;
+            }
+            if (pathList)
+            {
+                var pathItem = Regex.Match(line, @"^\s{6}-\s*(.+)$");
+                if (pathItem.Success)
+                {
+                    paths.Add(Unquote(pathItem.Groups[1].Value.Trim()));
+                    continue;
+                }
+                pathList = false;
+            }
+
+            var group = Regex.Match(line, @"^\s{6}(any|all):\s*$");
+            if (group.Success)
+            {
+                FlushEvidencePredicate();
+                evidence = new EvidenceGroup(group.Groups[1].Value, new List<EvidencePredicate>());
+                continue;
+            }
+            if (evidence is null) continue;
+
+            var fileContains = Regex.IsMatch(line, @"^\s{8}-\s*fileContains:\s*$");
+            if (fileContains)
+            {
+                FlushEvidencePredicate();
+                pendingFileContains = new EvidencePredicate("fileContains", null, null);
+                continue;
+            }
+            var predicate = Regex.Match(line, @"^\s{8}-\s*(file|directory):\s*(.+)$");
+            if (predicate.Success)
+            {
+                FlushEvidencePredicate();
+                evidence.Predicates.Add(new EvidencePredicate(predicate.Groups[1].Value, Unquote(predicate.Groups[2].Value.Trim()), null));
+                continue;
+            }
+            var property = Regex.Match(line, @"^\s{10}(file|text):\s*(.+)$");
+            if (property.Success && pendingFileContains is not null)
+            {
+                pendingFileContains = property.Groups[1].Value == "file"
+                    ? pendingFileContains with { Path = Unquote(property.Groups[2].Value.Trim()) }
+                    : pendingFileContains with { Text = Unquote(property.Groups[2].Value.Trim()) };
+            }
         }
-        if (rootName is not null && rootPath is not null) roots.Add(new BackupRoot(rootName, Unquote(rootPath), evidence.ToArray()));
+        FlushRoot();
+
         return new BackupDefinition(Unquote(id ?? Path.GetFileNameWithoutExtension(path)), Unquote(name ?? id ?? "Application"), roots,
             ReadPatterns(lines, "include"), ReadPatterns(lines, "exclude"));
     }
@@ -383,7 +459,29 @@ internal static class Program
         return lines.Skip(index + 1).TakeWhile(line => line.StartsWith("  -") || line.StartsWith("    -")).Select(line => Unquote(line[(line.IndexOf('-') + 1)..].Trim())).ToArray();
     }
 
-    private static bool EvidenceMatches(string root, IReadOnlyList<string> evidence) => evidence.Count == 0 || evidence.Any(item => File.Exists(Path.Combine(root, item)) || Directory.Exists(Path.Combine(root, item)));
+    private static bool EvidenceMatches(string root, EvidenceGroup? evidence)
+    {
+        if (evidence is null || evidence.Predicates.Count == 0) return true;
+        var matches = evidence.Predicates.Select(predicate =>
+        {
+            try
+            {
+                return predicate.Kind switch
+                {
+                    "file" => predicate.Path is not null && File.Exists(Path.Combine(root, predicate.Path)),
+                    "directory" => predicate.Path is not null && Directory.Exists(Path.Combine(root, predicate.Path)),
+                    "fileContains" => predicate.Path is not null && predicate.Text is not null &&
+                        File.Exists(Path.Combine(root, predicate.Path)) && File.ReadAllText(Path.Combine(root, predicate.Path)).Contains(predicate.Text, StringComparison.Ordinal),
+                    _ => false
+                };
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                return false;
+            }
+        });
+        return string.Equals(evidence.Operator, "all", StringComparison.OrdinalIgnoreCase) ? matches.All(match => match) : matches.Any();
+    }
 
     private static bool MatchesFilters(string relative, IReadOnlyList<string> include, IReadOnlyList<string> exclude) =>
         include.Any(pattern => GlobMatches(relative, pattern)) && !exclude.Any(pattern => GlobMatches(relative, pattern));
@@ -395,7 +493,9 @@ internal static class Program
     }
 
     private sealed record BackupDefinition(string Id, string Name, IReadOnlyList<BackupRoot> Roots, IReadOnlyList<string> Include, IReadOnlyList<string> Exclude);
-    private sealed record BackupRoot(string Name, string Path, IReadOnlyList<string> Evidence);
+    private sealed record BackupRoot(string Name, IReadOnlyList<string> Paths, EvidenceGroup? Evidence);
+    private sealed record EvidenceGroup(string Operator, List<EvidencePredicate> Predicates);
+    private sealed record EvidencePredicate(string Kind, string? Path, string? Text);
 
     private sealed class ProgressLine
     {

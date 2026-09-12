@@ -19,34 +19,9 @@ apps\
 
 ## 2. Format
 
-YAML is the recommended initial format because it is human-readable, concise and supports comments.
+YAML is the recommended initial format because it is human-readable, concise, and supports comments.
 
-## 3. Example
-
-```yaml
-version: 1
-id: vscode
-name: Visual Studio Code
-
-roots:
-  - name: user
-    path: "%APPDATA%\\Code\\User"
-    evidence:
-      any:
-        - file: "settings.json"
-        - file: "keybindings.json"
-
-include:
-  - "**"
-
-exclude:
-  - "workspaceStorage/**"
-  - "History/**"
-  - "**/*.log"
-  - "**/*.tmp"
-```
-
-## 4. Required fields
+## 3. Required fields
 
 ```yaml
 version: 1
@@ -57,7 +32,7 @@ roots: []
 
 ### `version`
 
-Schema version.
+Schema version. The current schema version is `1`.
 
 ### `id`
 
@@ -67,7 +42,7 @@ Recommended constraints:
 
 - lowercase
 - ASCII
-- `a-z`, `0-9`, `-`
+- `a-z`, `0-9`, and `-`
 
 ### `name`
 
@@ -75,59 +50,79 @@ Human-readable application title.
 
 ### `roots`
 
-One or more candidate application roots.
+One or more root definitions. Each root represents a different application folder. Roots are evaluated independently; the same filesystem path may be used by more than one root.
 
-## 5. Root definition
+## 4. Root definition
 
 ```yaml
 roots:
-  - name: user
-    path: "%APPDATA%\\Code\\User"
+  - name: user-data
+    path:
+      - "%APPDATA%\\Example"
+      - "%LOCALAPPDATA%\\Example"
     evidence:
-      all:
+      any:
         - file: "settings.json"
-        - fileContains:
-            file: "settings.json"
-            text: "editor."
+        - directory: "profiles"
 ```
 
 ### `name`
 
-Optional for a single logical root.
-
-Required if the application definition contains multiple independent roots that can be active simultaneously.
+Optional for a single logical root. Required when the application definition contains multiple independent roots that can be active simultaneously. Names must be unique within an application because they are used in the backup layout.
 
 ### `path`
 
-Windows path supporting environment-variable expansion.
+A Windows path, or an ordered list of alternative Windows paths, supporting environment-variable expansion.
+
+A scalar path is equivalent to a one-item list:
+
+```yaml
+path: "%APPDATA%\\Example"
+```
+
+The alternatives are evaluated in the order written. An alternative matches only when:
+
+1. The path exists as a directory; and
+2. Its evidence matches, if evidence is defined.
+
+After the first alternative matches, it is selected and no later alternative for that root is evaluated. If no alternative matches, the root is skipped. Alternatives are not merged or scanned together.
+
+A path can be used by multiple roots. Such roots remain independent: each root must match its own evidence, and a match for one root does not make another root match.
 
 ### `evidence`
 
-Evidence used to prevent accidental selection of an unrelated folder.
+Optional predicates used to prevent accidental selection of an unrelated folder. Evidence paths are relative to the candidate root.
 
-Supported logical groups:
-
-```yaml
-evidence:
-  any: []
-```
-
-or:
+The supported logical groups are:
 
 ```yaml
 evidence:
-  all: []
+  any:
+    - file: "settings.json"
 ```
 
-Initial evidence predicates:
+```yaml
+evidence:
+  all:
+    - file: "settings.json"
+    - directory: "profiles"
+```
+
+`any` requires at least one predicate to match. `all` requires every predicate to match. An empty or omitted evidence group matches any existing candidate directory.
+
+Supported predicates:
 
 ```yaml
 - file: "settings.json"
 ```
 
+Matches when the relative path is an existing file.
+
 ```yaml
 - directory: "profiles"
 ```
+
+Matches when the relative path is an existing directory.
 
 ```yaml
 - fileContains:
@@ -135,7 +130,38 @@ Initial evidence predicates:
     text: "[SomeApplication]"
 ```
 
-Evidence paths are relative to the candidate root.
+Matches when the relative file exists and contains the specified text.
+
+## 5. Complete example
+
+This example defines two independent folders. The user-data root has three alternatives, including one path shared with the installation root. The shared path is evaluated separately for each root using that root's evidence.
+
+```yaml
+version: 1
+id: raw-accel
+name: Raw Accel
+
+roots:
+  - name: installation
+    path: "%PROGRAMFILES%\\Raw Accel"
+    evidence:
+      any:
+        - file: "rawaccel.exe"
+
+  - name: user-data
+    path:
+      - "C:\\Programs\\RawAccel"
+      - "%PROGRAMFILES%\\Raw Accel"
+      - "%LOCALAPPDATA%\\Programs\\RawAccel"
+    evidence:
+      any:
+        - file: "settings.json"
+        - file: ".config"
+
+include:
+  - "settings.json"
+  - ".config"
+```
 
 ## 6. Filtering
 
@@ -149,7 +175,7 @@ exclude:
   - "**/*.tmp"
 ```
 
-Evaluation order:
+Filtering is applied after a root has been selected:
 
 ```text
 candidate file
@@ -172,35 +198,16 @@ include:
   - "**"
 ```
 
-## 7. Multiple roots
+## 7. Backup layout
 
-Example:
-
-```yaml
-version: 1
-id: vscode
-name: Visual Studio Code
-
-roots:
-  - name: user
-    path: "%APPDATA%\\Code\\User"
-    evidence:
-      any:
-        - file: "settings.json"
-
-  - name: extensions
-    path: "%USERPROFILE%\\.vscode\\extensions"
-    evidence:
-      any:
-        - directory: "."
-```
-
-Backup layout:
+Each selected root is stored below its application ID and logical root name. Relative paths below the selected root are preserved.
 
 ```text
-apps\vscode\
-├── user\
+apps\raw-accel\
+├── installation\
 │   └── ...
-└── extensions\
+└── user-data\
     └── ...
 ```
+
+Each root contributes files only from the first matching path in its own ordered path list.
