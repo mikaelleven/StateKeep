@@ -10,6 +10,20 @@ roots:
         - file: "settings.json"
         - file: ".config"
 
+  - name: programs
+    path: "C:\\Programs"
+    evidence:
+      any:
+        - file: "settings.json"
+        - file: ".config"
+
+  - name: local-programs
+    path: "%LOCALAPPDATA%\\Programs"
+    evidence:
+      any:
+        - file: "settings.json"
+        - file: ".config"
+
 include:
   - "settings.json"
   - ".config"
