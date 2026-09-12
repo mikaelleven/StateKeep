@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 
 namespace StateKeep;
@@ -162,8 +163,10 @@ internal static class Program
         try
         {
             Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+            var deviceId = EnsureDeviceId();
             File.WriteAllText(configPath, $"version: 1{Environment.NewLine}backupPath: {QuoteYamlValue(backupPath)}{Environment.NewLine}");
             Console.WriteLine($"Configured backup path: {backupPath}");
+            Console.WriteLine($"Device ID: {deviceId}");
             return Success;
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -173,10 +176,39 @@ internal static class Program
         }
     }
 
-    private static string GetConfigPath() => Path.Combine(
+    private static string GetStateDirectory() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-        "StateKeep",
-        "config.yaml");
+        "StateKeep");
+
+    private static string GetConfigPath() => Path.Combine(GetStateDirectory(), "config.yaml");
+
+    private static string GetDeviceIdPath() => Path.Combine(GetStateDirectory(), "device-id");
+
+    private static string EnsureDeviceId()
+    {
+        var deviceIdPath = GetDeviceIdPath();
+        if (File.Exists(deviceIdPath))
+        {
+            var existingDeviceId = File.ReadAllText(deviceIdPath).Trim();
+            if (existingDeviceId.Length > 0)
+            {
+                return existingDeviceId;
+            }
+        }
+
+        const string alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+        var deviceId = string.Create(10, alphabet, static (buffer, characters) =>
+        {
+            for (var index = 0; index < buffer.Length; index++)
+            {
+                buffer[index] = characters[RandomNumberGenerator.GetInt32(characters.Length)];
+            }
+        });
+
+        Directory.CreateDirectory(GetStateDirectory());
+        File.WriteAllText(deviceIdPath, deviceId + Environment.NewLine);
+        return deviceId;
+    }
 
     private static string? FindRecommendedCloudPath()
     {
@@ -279,6 +311,8 @@ internal static class Program
 
         Console.WriteLine("StateKeep status");
         Console.WriteLine($"Configuration: {configPath}");
+        var deviceId = ReadDeviceId();
+        Console.WriteLine($"Device ID: {deviceId ?? "not generated"}");
 
         if (!config.Exists)
         {
@@ -336,6 +370,16 @@ internal static class Program
             }
         }
 
+        var deviceId = ReadDeviceId();
+        if (deviceId is null)
+        {
+            errors.Add($"Device ID was not found: {GetDeviceIdPath()}");
+        }
+        else if (!Regex.IsMatch(deviceId, "^[A-Za-z0-9]{8,12}$"))
+        {
+            errors.Add("Device ID must contain 8-12 alphanumeric characters");
+        }
+
         if (errors.Count == 0)
         {
             Console.WriteLine("Configuration is valid.");
@@ -376,6 +420,12 @@ internal static class Program
         }
 
         return new Configuration(true, version, backupPath);
+    }
+
+    private static string? ReadDeviceId()
+    {
+        var deviceIdPath = GetDeviceIdPath();
+        return File.Exists(deviceIdPath) ? File.ReadAllText(deviceIdPath).Trim() : null;
     }
 
     private static string Unquote(string value)
