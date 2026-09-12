@@ -11,14 +11,14 @@ roots:
         - file: ".config"
 
   - name: programs
-    path: "C:\\Programs"
+    path: "C:\\Programs\\RawAccel"
     evidence:
       any:
         - file: "settings.json"
         - file: ".config"
 
   - name: local-programs
-    path: "%LOCALAPPDATA%\\Programs"
+    path: "%LOCALAPPDATA%\\Programs\\RawAccel"
     evidence:
       any:
         - file: "settings.json"
