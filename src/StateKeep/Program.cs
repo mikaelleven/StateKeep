@@ -325,6 +325,10 @@ internal static class Program
                         {
                             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
                             File.Copy(file, target, true);
+                            if (arguments.Verbose)
+                            {
+                                spinner.FileCopied(relative);
+                            }
                         }
                         appCopied++;
                     }
@@ -504,7 +508,7 @@ internal static class Program
         private readonly string label;
         private readonly bool persist;
         private bool hasDetail;
-        private int wouldCopyCount;
+        private int outputFileCount;
 
         public ProgressLine(bool silent, string label, bool persist)
         {
@@ -532,7 +536,7 @@ internal static class Program
         {
             if (!silent)
             {
-                if (hasDetail || wouldCopyCount > 0)
+                if (hasDetail || outputFileCount > 0)
                 {
                     Console.Write($"\r\u001b[2K  Scanning file {text}");
                 }
@@ -551,7 +555,17 @@ internal static class Program
             {
                 Console.Write($"\r\u001b[2K  Would copy {relativePath}\n");
                 hasDetail = false;
-                wouldCopyCount++;
+                outputFileCount++;
+            }
+        }
+
+        public void FileCopied(string relativePath)
+        {
+            if (!silent)
+            {
+                Console.Write($"\r\u001b[2K  file {relativePath} copied\n");
+                hasDetail = false;
+                outputFileCount++;
             }
         }
 
@@ -584,11 +598,11 @@ internal static class Program
                 Console.Write("\r\u001b[2K");
             }
 
-            if (wouldCopyCount > 0)
+            if (outputFileCount > 0)
             {
                 // Replace the spinner, then leave the cursor below persistent per-file
                 // messages for the per-app result.
-                var linesToSpinner = wouldCopyCount + 1;
+                var linesToSpinner = outputFileCount + 1;
                 Console.Write($"\u001b[{linesToSpinner}A\r\u001b[2K{result}\u001b[{linesToSpinner}B\r");
             }
             else if (hasDetail)
