@@ -16,7 +16,7 @@ Windows command-line tool for backing up and restoring application settings to a
 
 ## Local development setup
 
-Run `setup.cmd --dev` on Windows or `./setup.sh --dev` on macOS/Linux for the complete development environment, including dev-only tools such as pytest. Use the setup script without `--dev` for runtime dependencies only.
+Run `setup.cmd` from the repository root to restore the .NET dependencies. The script accepts `--dev` for consistency with other project scaffolds, but it does not change this project's .NET dependency restoration.
 
 ## Development conventions
 
