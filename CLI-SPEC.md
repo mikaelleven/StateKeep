@@ -35,7 +35,13 @@ statekeep restore vscode --force
 ### List known applications
 
 ```powershell
-statekeep list
+statekeep apps list
+```
+
+### Open the installed applications folder
+
+```powershell
+statekeep apps open
 ```
 
 ### Show current status/configuration

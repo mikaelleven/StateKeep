@@ -17,7 +17,8 @@ statekeep backup
 statekeep backup <app>
 statekeep restore <app>
 statekeep restore --all
-statekeep list
+statekeep apps list
+statekeep apps open
 statekeep status
 statekeep validate
 statekeep install task

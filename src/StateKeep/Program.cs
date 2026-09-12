@@ -1,3 +1,5 @@
+using System.ComponentModel;
+using System.Diagnostics;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text.RegularExpressions;
@@ -64,9 +66,9 @@ internal static class Program
             return Validate();
         }
 
-        if (string.Equals(arguments.Command, "list", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(arguments.Command, "apps", StringComparison.OrdinalIgnoreCase))
         {
-            return ListApplications();
+            return Apps(arguments);
         }
 
         WarnIfBackupPathIsNotConfigured();
@@ -83,7 +85,7 @@ internal static class Program
     {
         "backup",
         "restore",
-        "list",
+        "apps",
         "status",
         "validate",
         "install",
@@ -125,7 +127,8 @@ internal static class Program
         Console.WriteLine("  backup [app]       Back up all applications or one application");
         Console.WriteLine("  restore [app]      Restore one application");
         Console.WriteLine("  restore --all      Restore all applications");
-        Console.WriteLine("  list               List known applications");
+        Console.WriteLine("  apps list          List known applications");
+        Console.WriteLine("  apps open          Open the installed apps folder");
         Console.WriteLine("  status             Show current status and configuration");
         Console.WriteLine("  validate           Validate configuration");
         Console.WriteLine("  setup [path]       Configure the backup path");
@@ -635,6 +638,49 @@ internal static class Program
             {
                 Console.Write($"\r\u001b[2K{result}\n");
             }
+        }
+    }
+
+    private static int Apps(Arguments arguments)
+    {
+        var subcommand = arguments.Positionals.Skip(1).FirstOrDefault();
+        if (string.Equals(subcommand, "list", StringComparison.OrdinalIgnoreCase))
+        {
+            return ListApplications();
+        }
+
+        if (string.Equals(subcommand, "open", StringComparison.OrdinalIgnoreCase))
+        {
+            return OpenApplicationsDirectory();
+        }
+
+        WriteError("Usage: statekeep apps <list|open>");
+        return UsageError;
+    }
+
+    private static int OpenApplicationsDirectory()
+    {
+        var appsDirectory = Path.Combine(AppContext.BaseDirectory, "apps");
+        if (!Directory.Exists(appsDirectory))
+        {
+            WriteError($"Installed apps directory was not found: {appsDirectory}");
+            return UsageError;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                UseShellExecute = true,
+                Arguments = $"\"{appsDirectory}\""
+            });
+            return Success;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+        {
+            WriteError($"Could not open the installed apps directory: {exception.Message}");
+            return UsageError;
         }
     }
 
