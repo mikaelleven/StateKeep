@@ -292,7 +292,10 @@ internal static class Program
             foreach (var root in app.Roots)
             {
                 var source = Environment.ExpandEnvironmentVariables(root.Path);
-                var spinner = new ProgressLine(arguments.Silent, $"Scanning {app.Name} ({root.Name})");
+                var spinner = new ProgressLine(
+                    arguments.Silent,
+                    $"Scanning {app.Name} ({root.Name})",
+                    arguments.Verbose || requestedApp is not null);
                 try
                 {
                     spinner.Start();
@@ -397,12 +400,14 @@ internal static class Program
     {
         private readonly bool silent;
         private readonly string label;
+        private readonly bool persist;
         private bool hasDetail;
 
-        public ProgressLine(bool silent, string label)
+        public ProgressLine(bool silent, string label, bool persist)
         {
             this.silent = silent;
             this.label = label;
+            this.persist = persist;
         }
 
         public void Start()
@@ -427,6 +432,21 @@ internal static class Program
         {
             if (silent)
             {
+                return;
+            }
+
+            if (!persist)
+            {
+                if (hasDetail)
+                {
+                    // Remove the temporary detail line and the root spinner line.
+                    Console.Write("\r\u001b[2K\u001b[1A\r\u001b[2K\n");
+                }
+                else
+                {
+                    Console.Write("\r\u001b[2K");
+                }
+
                 return;
             }
 
