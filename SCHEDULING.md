@@ -2,16 +2,16 @@
 
 ## 1. Principle
 
-AppBackup does not implement its own scheduler or Windows service in v1.
+StateKeep does not implement its own scheduler or Windows service in v1.
 
 Windows Task Scheduler is the scheduling mechanism.
 
 ## 2. Installation command
 
-AppBackup shall provide:
+StateKeep shall provide:
 
 ```powershell
-appbackup install task
+statekeep install task
 ```
 
 The command must be idempotent.
@@ -19,7 +19,7 @@ The command must be idempotent.
 Repeated execution shall:
 
 - create the task if missing
-- update the existing AppBackup task when configuration differs
+- update the existing StateKeep task when configuration differs
 - never create duplicate scheduled tasks
 
 ## 3. Scheduled action
@@ -27,7 +27,7 @@ Repeated execution shall:
 Recommended scheduled action:
 
 ```powershell
-appbackup.exe backup --silent
+statekeep.exe backup --silent
 ```
 
 The configured executable path should be absolute when registered with Task Scheduler.
@@ -37,7 +37,7 @@ The configured executable path should be absolute when registered with Task Sche
 Recommended fixed task name:
 
 ```text
-AppBackup Automatic Backup
+StateKeep Automatic Backup
 ```
 
 A fixed identity allows reliable idempotent updates.
@@ -59,6 +59,6 @@ Scheduled execution shall use `--silent` so that:
 
 ## 7. Failure handling
 
-The task installer should configure Task Scheduler to use AppBackup's exit code as the authoritative task result.
+The task installer should configure Task Scheduler to use StateKeep's exit code as the authoritative task result.
 
-AppBackup itself remains responsible for per-app failure isolation and logging.
+StateKeep itself remains responsible for per-app failure isolation and logging.

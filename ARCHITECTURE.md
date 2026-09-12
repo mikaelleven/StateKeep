@@ -2,14 +2,14 @@
 
 ## 1. Architectural principles
 
-AppBackup follows these principles:
+StateKeep follows these principles:
 
 - **KISS** — prefer straightforward filesystem operations and declarative configuration.
 - **YAGNI** — do not introduce subsystems before a concrete need exists.
 - **Stability first** — predictable and safe behavior is more important than feature count.
-- **Cloud-provider agnostic** — AppBackup writes to a normal local filesystem path. OneDrive, Dropbox or another sync client is outside AppBackup's responsibility.
+- **Cloud-provider agnostic** — StateKeep writes to a normal local filesystem path. OneDrive, Dropbox or another sync client is outside StateKeep's responsibility.
 - **Declarative app knowledge** — application-specific paths and evidence belong in bundled app definitions, not hard-coded engine logic.
-- **Recoverable without AppBackup** — backups are ordinary files and folders.
+- **Recoverable without StateKeep** — backups are ordinary files and folders.
 - **Failure isolation** — failure in one application must not prevent independent applications from being processed.
 - **Safe restore** — existing destination files are never overwritten implicitly.
 
@@ -46,8 +46,8 @@ AppBackup follows these principles:
 Recommended installation layout:
 
 ```text
-<AppBackup installation>\
-├── appbackup.exe
+<StateKeep installation>\
+├── statekeep.exe
 ├── apps\
 │   ├── vscode.yaml
 │   ├── zed.yaml
@@ -66,7 +66,7 @@ The bundled definitions are part of the application distribution.
 Local mutable state belongs outside the installation directory:
 
 ```text
-%LOCALAPPDATA%\AppBackup\
+%LOCALAPPDATA%\StateKeep\
 ├── config.yaml
 ├── device-id
 └── logs\
@@ -109,7 +109,7 @@ Requirements:
 
 - 8-12 alphanumeric characters
 - generated randomly
-- persisted in `%LOCALAPPDATA%\AppBackup\device-id`
+- persisted in `%LOCALAPPDATA%\StateKeep\device-id`
 - never derived from mutable hardware identifiers
 
 The effective backup device folder combines the current computer name and persistent device ID.

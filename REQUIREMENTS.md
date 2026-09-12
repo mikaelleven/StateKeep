@@ -13,21 +13,21 @@ The tool shall support manual execution from a terminal.
 Minimum commands:
 
 ```text
-appbackup backup
-appbackup backup <app>
-appbackup restore <app>
-appbackup restore --all
-appbackup list
-appbackup status
-appbackup validate
-appbackup install task
+statekeep backup
+statekeep backup <app>
+statekeep restore <app>
+statekeep restore --all
+statekeep list
+statekeep status
+statekeep validate
+statekeep install task
 ```
 
 ### FR-2 Automatic operation
 
 The tool shall support unattended execution through Windows Task Scheduler.
 
-`appbackup install task` shall idempotently create or update the scheduled task required to run automatic backups.
+`statekeep install task` shall idempotently create or update the scheduled task required to run automatic backups.
 
 Repeated execution of the command shall leave the system in the same desired state without creating duplicate tasks.
 
@@ -76,7 +76,7 @@ Format:
 
 ### FR-6 Bundled per-app definitions
 
-Application definitions shall be distributed with AppBackup.
+Application definitions shall be distributed with StateKeep.
 
 Default location:
 
@@ -84,7 +84,7 @@ Default location:
 .\apps\
 ```
 
-where `.` is the directory containing the AppBackup executable.
+where `.` is the directory containing the StateKeep executable.
 
 ### FR-7 Application discovery
 
@@ -115,7 +115,7 @@ Multiple roots shall be stored under stable logical root names.
 
 ### FR-10 Current-state backup
 
-The destination shall represent the current selected application state rather than AppBackup-managed timestamped snapshots.
+The destination shall represent the current selected application state rather than StateKeep-managed timestamped snapshots.
 
 Files that no longer exist in the selected source set may be removed from the backup mirror only after successful source scanning/planning.
 
@@ -123,7 +123,7 @@ Files that no longer exist in the selected source set may be removed from the ba
 
 A restore conflict exists when the restore target already contains a file that is not identical to the backup source.
 
-For every conflict, AppBackup shall display both source and destination metadata:
+For every conflict, StateKeep shall display both source and destination metadata:
 
 - path
 - size
@@ -173,7 +173,7 @@ Logs shall be written to a local mutable application-data directory.
 Example:
 
 ```text
-%LOCALAPPDATA%\AppBackup\logs\
+%LOCALAPPDATA%\StateKeep\logs\
 ```
 
 Logging shall remain active in silent mode.
@@ -207,7 +207,7 @@ until a demonstrated use case requires them.
 
 ### NFR-4 Recoverability
 
-Backups shall be ordinary files and directories so that users can manually inspect and recover data without AppBackup.
+Backups shall be ordinary files and directories so that users can manually inspect and recover data without StateKeep.
 
 ### NFR-5 Determinism
 

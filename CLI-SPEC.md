@@ -5,55 +5,55 @@
 ### Backup all detected applications
 
 ```powershell
-appbackup backup
+statekeep backup
 ```
 
 ### Backup one application
 
 ```powershell
-appbackup backup vscode
+statekeep backup vscode
 ```
 
 ### Restore one application
 
 ```powershell
-appbackup restore vscode
+statekeep restore vscode
 ```
 
 ### Restore all applications
 
 ```powershell
-appbackup restore --all
+statekeep restore --all
 ```
 
 ### Force restore conflicts
 
 ```powershell
-appbackup restore vscode --force
+statekeep restore vscode --force
 ```
 
 ### List known applications
 
 ```powershell
-appbackup list
+statekeep list
 ```
 
 ### Show current status/configuration
 
 ```powershell
-appbackup status
+statekeep status
 ```
 
 ### Validate global and application configuration
 
 ```powershell
-appbackup validate
+statekeep validate
 ```
 
 ### Install/update scheduled backup task
 
 ```powershell
-appbackup install task
+statekeep install task
 ```
 
 ## 2. Global options
@@ -71,7 +71,7 @@ The process shall still:
 Typical scheduled task action:
 
 ```powershell
-appbackup backup --silent
+statekeep backup --silent
 ```
 
 ## 3. Progress rendering

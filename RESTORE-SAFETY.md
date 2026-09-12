@@ -4,7 +4,7 @@
 
 Restore must be conservative.
 
-An existing destination file shall never be overwritten unless AppBackup can prove it is identical or the user explicitly supplies `--force`.
+An existing destination file shall never be overwritten unless StateKeep can prove it is identical or the user explicitly supplies `--force`.
 
 ## 2. Conflict detection
 

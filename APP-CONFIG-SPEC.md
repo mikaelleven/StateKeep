@@ -2,7 +2,7 @@
 
 ## 1. Location
 
-Bundled application definitions are stored relative to the AppBackup executable:
+Bundled application definitions are stored relative to the StateKeep executable:
 
 ```text
 .\apps\

@@ -1,0 +1,29 @@
+project:
+  name: StateKeep
+  description: Windows command-line tool for backing up and restoring application settings to a cloud-synchronized folder.
+  kind: application
+  shape: application
+  interfaces:
+    - cli
+  platforms:
+    - windows
+  constraints: "Internal nickname: Ember. Keep backups as ordinary files in a cloud-synchronized local folder; remain cloud-provider agnostic."
+technology:
+  primary:
+    language: csharp
+    name: .NET
+    framework: .NET
+    version: 10.0.302
+  secondary:
+    language: python
+    name: Python
+    version: 3.11
+    platform: cross-platform
+product:
+  distribution: local-install
+blueprint:
+  id: csharp
+environment:
+  initialize: true
+  install_missing_tools: true
+  sync_dependencies: true

@@ -1,12 +1,12 @@
-# AppBackup
+# StateKeep
 
-AppBackup is a Windows-only command-line tool for backing up and restoring application settings to a cloud-synchronized folder such as OneDrive.
+StateKeep is a Windows-only command-line tool for backing up and restoring application settings to a cloud-synchronized folder such as OneDrive.
 
 The tool is intentionally simple: it reads declarative per-application definitions, locates known application settings folders, filters the relevant files, and mirrors the resulting application state into a per-device backup folder.
 
 ## Purpose
 
-AppBackup exists to make application configuration easy to preserve, version through the cloud provider, and restore after a fresh Windows installation or accidental configuration change.
+StateKeep exists to make application configuration easy to preserve, version through the cloud provider, and restore after a fresh Windows installation or accidental configuration change.
 
 It is **not** intended to replace a full-system backup product.
 
@@ -21,12 +21,12 @@ It is **not** intended to replace a full-system backup product.
 ## Example
 
 ```powershell
-appbackup backup
-appbackup restore vscode
-appbackup install task
+statekeep backup
+statekeep restore vscode
+statekeep install task
 ```
 
-Default application definitions are bundled with AppBackup under:
+Default application definitions are bundled with StateKeep under:
 
 ```text
 .\apps\
