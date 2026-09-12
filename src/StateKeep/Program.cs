@@ -371,6 +371,7 @@ internal static class Program
             else if (pathMatch.Success && rootName is not null) rootPath = pathMatch.Groups[1].Value.Trim();
             else if (evidenceMatch.Success && rootName is not null) evidence.Add(Unquote(evidenceMatch.Groups[1].Value.Trim()));
         }
+        if (rootName is not null && rootPath is not null) roots.Add(new BackupRoot(rootName, Unquote(rootPath), evidence.ToArray()));
         return new BackupDefinition(Unquote(id ?? Path.GetFileNameWithoutExtension(path)), Unquote(name ?? id ?? "Application"), roots,
             ReadPatterns(lines, "include"), ReadPatterns(lines, "exclude"));
     }
