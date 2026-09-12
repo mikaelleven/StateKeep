@@ -1,0 +1,17 @@
+version: 1
+id: sharex
+name: ShareX
+
+roots:
+  - name: personal
+    path: "%USERPROFILE%\\Documents\\ShareX"
+    evidence:
+      any:
+        - file: "ApplicationConfig.json"
+        - file: "HotkeysConfig.json"
+        - file: "UploadersConfig.json"
+
+include:
+  - "ApplicationConfig.json"
+  - "HotkeysConfig.json"
+  - "UploadersConfig*.json"
