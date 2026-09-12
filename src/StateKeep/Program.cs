@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text.RegularExpressions;
 
 namespace StateKeep;
 
@@ -12,7 +13,7 @@ internal static class Program
     {
         if (args.Length == 0)
         {
-            WriteHelp();
+            WriteHelp(includeConfigurationWarning: true);
             return Success;
         }
 
@@ -41,6 +42,8 @@ internal static class Program
             WriteError($"Unknown command '{arguments.Command}'. Use 'statekeep --help' for usage.");
             return UsageError;
         }
+
+        WarnIfBackupPathIsNotConfigured();
 
         if (!arguments.Silent)
         {
@@ -71,7 +74,7 @@ internal static class Program
             : $"statekeep {informationalVersion}";
     }
 
-    private static void WriteHelp(string? command = null)
+    private static void WriteHelp(string? command = null, bool includeConfigurationWarning = false)
     {
         if (string.Equals(command, "install", StringComparison.OrdinalIgnoreCase))
         {
@@ -82,6 +85,12 @@ internal static class Program
         }
 
         Console.WriteLine("StateKeep - preserve application settings in a local backup folder.");
+
+        if (includeConfigurationWarning)
+        {
+            WriteConfigurationWarning();
+        }
+
         Console.WriteLine();
         Console.WriteLine("Usage: statekeep <command> [arguments] [options]");
         Console.WriteLine();
@@ -98,6 +107,40 @@ internal static class Program
         Console.WriteLine("  -h, --help         Show help");
         Console.WriteLine("  -v, --version      Show version");
         Console.WriteLine("      --silent       Suppress normal console output");
+    }
+
+    private static void WarnIfBackupPathIsNotConfigured()
+    {
+        var configPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "StateKeep",
+            "config.yaml");
+
+        if (!File.Exists(configPath))
+        {
+            WriteConfigurationWarning();
+            return;
+        }
+
+        var hasBackupPath = File.ReadLines(configPath)
+            .Select(line => Regex.Match(line, @"^\s*(?:backupPath|backup_path)\s*:\s*(?<value>.+?)\s*(?:#.*)?$"))
+            .Where(match => match.Success)
+            .Select(match => match.Groups["value"].Value.Trim().Trim('"', '\''))
+            .Any(value => value.Length > 0);
+
+        if (!hasBackupPath)
+        {
+            WriteConfigurationWarning();
+        }
+    }
+
+    private static void WriteConfigurationWarning()
+    {
+        const string yellow = "\u001b[33m";
+        const string reset = "\u001b[0m";
+
+        Console.WriteLine($"{yellow}Warning: No valid app configuration with a backup path was found.{reset}");
+        Console.WriteLine($"{yellow}Run setup.cmd to configure StateKeep before using backup or restore commands.{reset}");
     }
 
     private static void WriteError(string message) => Console.Error.WriteLine($"Error: {message}");
