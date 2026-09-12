@@ -43,6 +43,11 @@ internal static class Program
             return UsageError;
         }
 
+        if (string.Equals(arguments.Command, "setup", StringComparison.OrdinalIgnoreCase))
+        {
+            return Setup(arguments.Positionals.Skip(1).FirstOrDefault());
+        }
+
         WarnIfBackupPathIsNotConfigured();
 
         if (!arguments.Silent)
@@ -60,7 +65,8 @@ internal static class Program
         "list",
         "status",
         "validate",
-        "install"
+        "install",
+        "setup"
     };
 
     private static string GetVersion()
@@ -100,7 +106,8 @@ internal static class Program
         Console.WriteLine("  restore --all      Restore all applications");
         Console.WriteLine("  list               List known applications");
         Console.WriteLine("  status             Show current status and configuration");
-        Console.WriteLine("  validate            Validate configuration");
+        Console.WriteLine("  validate           Validate configuration");
+        Console.WriteLine("  setup [path]       Configure the backup path");
         Console.WriteLine("  install task       Install or update the scheduled backup task");
         Console.WriteLine();
         Console.WriteLine("Options:");
@@ -109,12 +116,93 @@ internal static class Program
         Console.WriteLine("      --silent       Suppress normal console output");
     }
 
+    private static int Setup(string? requestedPath)
+    {
+        var configPath = GetConfigPath();
+        var recommendedPath = requestedPath is null ? FindRecommendedCloudPath() : null;
+        var backupPath = requestedPath;
+
+        if (string.IsNullOrWhiteSpace(backupPath))
+        {
+            if (recommendedPath is not null)
+            {
+                Console.WriteLine($"Recommended backup path: {recommendedPath}");
+                Console.Write("Backup path [press Enter to use the recommendation]: ");
+                var enteredPath = Console.ReadLine();
+                backupPath = string.IsNullOrWhiteSpace(enteredPath) ? recommendedPath : enteredPath.Trim();
+            }
+            else
+            {
+                Console.Write("Backup path: ");
+                backupPath = Console.ReadLine()?.Trim();
+            }
+        }
+
+        if (string.IsNullOrWhiteSpace(backupPath))
+        {
+            WriteError("A backup path is required.");
+            return UsageError;
+        }
+
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
+            File.WriteAllText(configPath, $"version: 1{Environment.NewLine}backupPath: {QuoteYamlValue(backupPath)}{Environment.NewLine}");
+            Console.WriteLine($"Configured backup path: {backupPath}");
+            return Success;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            WriteError($"Could not write configuration: {exception.Message}");
+            return UsageError;
+        }
+    }
+
+    private static string GetConfigPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "StateKeep",
+        "config.yaml");
+
+    private static string? FindRecommendedCloudPath()
+    {
+        var candidates = new (string Token, string? Value)[]
+        {
+            ("%ONEDRIVE%", Environment.GetEnvironmentVariable("ONEDRIVE")),
+            ("%DROPBOX%", Environment.GetEnvironmentVariable("DROPBOX")),
+            ("%GOOGLEDRIVE%", Environment.GetEnvironmentVariable("GOOGLEDRIVE"))
+        };
+
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        candidates = candidates
+            .Select(candidate => (candidate.Token, Value: ExistingDirectory(candidate.Value)))
+            .Concat(new[]
+            {
+                ("%ONEDRIVE%", ExistingDirectory(Path.Combine(userProfile, "OneDrive"))),
+                ("%DROPBOX%", ExistingDirectory(Path.Combine(userProfile, "Dropbox"))),
+                ("%GOOGLEDRIVE%", ExistingDirectory(Path.Combine(userProfile, "Google Drive")))
+            })
+            .ToArray();
+
+        foreach (var candidate in candidates)
+        {
+            if (candidate.Value is not null)
+            {
+                return $"{candidate.Token}\\.StateKeep";
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ExistingDirectory(string? path) =>
+        !string.IsNullOrWhiteSpace(path) && Directory.Exists(path) ? path : null;
+
+    private static string QuoteYamlValue(string value) =>
+        $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"") }\"";
+
     private static void WarnIfBackupPathIsNotConfigured()
     {
-        var configPath = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "StateKeep",
-            "config.yaml");
+        var configPath = GetConfigPath();
 
         if (!File.Exists(configPath))
         {
@@ -140,7 +228,7 @@ internal static class Program
         const string reset = "\u001b[0m";
 
         Console.WriteLine($"{yellow}Warning: No valid app configuration with a backup path was found.{reset}");
-        Console.WriteLine($"{yellow}Run setup.cmd to configure StateKeep before using backup or restore commands.{reset}");
+        Console.WriteLine($"{yellow}Run \"statekeep setup\" to configure StateKeep before using backup or restore commands.{reset}");
     }
 
     private static void WriteError(string message) => Console.Error.WriteLine($"Error: {message}");
@@ -158,6 +246,7 @@ internal static class Program
 
         public string? Command { get; }
         public bool Silent { get; }
+        public IReadOnlyList<string> Positionals => values.Where(value => !value.StartsWith('-')).ToArray();
 
         public bool Has(params string[] options) => values.Any(value => options.Contains(value, StringComparer.OrdinalIgnoreCase));
     }
