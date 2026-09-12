@@ -49,6 +49,11 @@ internal static class Program
             return Setup(arguments.Positionals.Skip(1).FirstOrDefault());
         }
 
+        if (string.Equals(arguments.Command, "backup", StringComparison.OrdinalIgnoreCase))
+        {
+            return Backup(arguments);
+        }
+
         if (string.Equals(arguments.Command, "status", StringComparison.OrdinalIgnoreCase))
         {
             return Status();
@@ -130,6 +135,8 @@ internal static class Program
         Console.WriteLine("  -h, --help         Show help");
         Console.WriteLine("  -v, --version      Show version");
         Console.WriteLine("      --silent       Suppress normal console output");
+        Console.WriteLine("      --verbose      Write copied files to stdout");
+        Console.WriteLine("      --dryrun       Check files without copying");
     }
 
     private static int Setup(string? requestedPath)
@@ -246,6 +253,195 @@ internal static class Program
 
     private static string QuoteYamlValue(string value) =>
         $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"") }\"";
+
+    private static int Backup(Arguments arguments)
+    {
+        var configuration = ReadConfiguration(GetConfigPath());
+        if (!configuration.Exists || string.IsNullOrWhiteSpace(configuration.BackupPath))
+        {
+            WriteError("A configured backup path is required. Run \"statekeep setup\" first.");
+            return UsageError;
+        }
+
+        var appDirectory = Path.Combine(AppContext.BaseDirectory, "apps");
+        if (!Directory.Exists(appDirectory))
+        {
+            WriteError($"Application definition directory was not found: {appDirectory}");
+            return UsageError;
+        }
+
+        var requestedApp = arguments.Positionals.Skip(1).FirstOrDefault();
+        var applications = Directory.EnumerateFiles(appDirectory, "*.yaml")
+            .Concat(Directory.EnumerateFiles(appDirectory, "*.yml"))
+            .Select(ReadBackupDefinition)
+            .Where(app => requestedApp is null || string.Equals(app.Id, requestedApp, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(app => app.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var backupRoot = Path.Combine(Environment.ExpandEnvironmentVariables(configuration.BackupPath),
+            $"{Environment.MachineName}_{EnsureDeviceId()}", "apps");
+        var scanned = 0;
+        var successful = 0;
+        var copied = 0;
+
+        foreach (var app in applications)
+        {
+            scanned++;
+            var appCopied = 0;
+            var failed = false;
+            foreach (var root in app.Roots)
+            {
+                var source = Environment.ExpandEnvironmentVariables(root.Path);
+                var spinner = new ProgressLine(arguments.Silent, $"Scanning {app.Name} ({root.Name})");
+                try
+                {
+                    spinner.Start();
+                    if (!Directory.Exists(source) || !EvidenceMatches(source, root.Evidence))
+                    {
+                        spinner.Complete(false, "not found");
+                        continue;
+                    }
+
+                    var files = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories)
+                        .Where(file => MatchesFilters(Path.GetRelativePath(source, file), app.Include, app.Exclude))
+                        .ToArray();
+                    spinner.Detail($"Scanning file {(files.FirstOrDefault() is null ? "(none)" : Path.GetFileName(files[0]))}");
+                    var destination = Path.Combine(backupRoot, app.Id, root.Name);
+                    foreach (var file in files)
+                    {
+                        var relative = Path.GetRelativePath(source, file);
+                        var target = Path.Combine(destination, relative);
+                        if (arguments.Verbose)
+                        {
+                            Console.WriteLine($"{(arguments.DryRun ? "Would copy" : "Copying")} {file} -> {target}");
+                        }
+                        if (!arguments.DryRun)
+                        {
+                            Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                            File.Copy(file, target, true);
+                        }
+                        appCopied++;
+                    }
+                    spinner.Complete(true, $"{appCopied} file{(appCopied == 1 ? "" : "s")}");
+                }
+                catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+                {
+                    failed = true;
+                    spinner.Complete(false, exception.Message);
+                }
+            }
+
+            if (!arguments.DryRun) copied += appCopied;
+            if (!arguments.Silent)
+            {
+                Console.WriteLine($"{(failed ? "✗" : "✓")} {app.Name}: {appCopied} file{(appCopied == 1 ? "" : "s")} {(arguments.DryRun ? "checked" : "copied")}");
+            }
+            if (!failed) successful++;
+        }
+
+        if (!arguments.Silent)
+        {
+            Console.WriteLine($"Completed: {scanned} apps scanned, {successful} successful, {copied} files copied{(arguments.DryRun ? " (dry-run; files were only checked)" : "")}.");
+        }
+        return successful == scanned ? Success : 1;
+    }
+
+    private static BackupDefinition ReadBackupDefinition(string path)
+    {
+        var lines = File.ReadAllLines(path);
+        var id = lines.Select(line => Regex.Match(line, @"^\s*id\s*:\s*(.+)$")).FirstOrDefault(m => m.Success)?.Groups[1].Value.Trim();
+        var name = lines.Select(line => Regex.Match(line, @"^\s*name\s*:\s*(.+)$")).FirstOrDefault(m => m.Success)?.Groups[1].Value.Trim();
+        var roots = new List<BackupRoot>();
+        string? rootName = null;
+        string? rootPath = null;
+        var evidence = new List<string>();
+        foreach (var line in lines.Append("- __end__"))
+        {
+            var root = Regex.Match(line, @"^\s*- name:\s*(.+)$");
+            var pathMatch = Regex.Match(line, @"^\s*path:\s*(.+)$");
+            var evidenceMatch = Regex.Match(line, @"^\s*- file:\s*[""']?([^""']+)[""']?\s*$");
+            if (root.Success)
+            {
+                if (rootName is not null && rootPath is not null) roots.Add(new BackupRoot(rootName, Unquote(rootPath), evidence.ToArray()));
+                rootName = Unquote(root.Groups[1].Value.Trim()); rootPath = null; evidence.Clear();
+            }
+            else if (pathMatch.Success && rootName is not null) rootPath = pathMatch.Groups[1].Value.Trim();
+            else if (evidenceMatch.Success && rootName is not null) evidence.Add(Unquote(evidenceMatch.Groups[1].Value.Trim()));
+        }
+        return new BackupDefinition(Unquote(id ?? Path.GetFileNameWithoutExtension(path)), Unquote(name ?? id ?? "Application"), roots,
+            ReadPatterns(lines, "include"), ReadPatterns(lines, "exclude"));
+    }
+
+    private static string[] ReadPatterns(string[] lines, string key)
+    {
+        var index = Array.FindIndex(lines, line => Regex.IsMatch(line, $@"^\s*{key}:\s*$"));
+        if (index < 0) return key == "include" ? new[] { "**" } : Array.Empty<string>();
+        return lines.Skip(index + 1).TakeWhile(line => line.StartsWith("  -") || line.StartsWith("    -")).Select(line => Unquote(line[(line.IndexOf('-') + 1)..].Trim())).ToArray();
+    }
+
+    private static bool EvidenceMatches(string root, IReadOnlyList<string> evidence) => evidence.Count == 0 || evidence.Any(item => File.Exists(Path.Combine(root, item)) || Directory.Exists(Path.Combine(root, item)));
+
+    private static bool MatchesFilters(string relative, IReadOnlyList<string> include, IReadOnlyList<string> exclude) =>
+        include.Any(pattern => GlobMatches(relative, pattern)) && !exclude.Any(pattern => GlobMatches(relative, pattern));
+
+    private static bool GlobMatches(string value, string pattern)
+    {
+        var regex = "^" + Regex.Escape(pattern).Replace("\\*\\*", ".*").Replace("\\*", "[^/\\\\]*").Replace("\\?", ".") + "$";
+        return Regex.IsMatch(value.Replace('\\', '/'), regex, RegexOptions.IgnoreCase);
+    }
+
+    private sealed record BackupDefinition(string Id, string Name, IReadOnlyList<BackupRoot> Roots, IReadOnlyList<string> Include, IReadOnlyList<string> Exclude);
+    private sealed record BackupRoot(string Name, string Path, IReadOnlyList<string> Evidence);
+
+    private sealed class ProgressLine
+    {
+        private readonly bool silent;
+        private readonly string label;
+        private bool hasDetail;
+
+        public ProgressLine(bool silent, string label)
+        {
+            this.silent = silent;
+            this.label = label;
+        }
+
+        public void Start()
+        {
+            if (!silent)
+            {
+                Console.Write($"| {label}");
+            }
+        }
+
+        public void Detail(string text)
+        {
+            if (!silent)
+            {
+                hasDetail = true;
+                Console.WriteLine();
+                Console.Write($"  Scanning file {text}");
+            }
+        }
+
+        public void Complete(bool ok, string text)
+        {
+            if (silent)
+            {
+                return;
+            }
+
+            var result = $"{(ok ? "✓" : "✗")} {label}: {text}";
+            if (hasDetail)
+            {
+                // Replace the temporary detail line, then replace the spinner line.
+                Console.Write($"\r\u001b[2K\u001b[1A\r\u001b[2K{result}\n");
+            }
+            else
+            {
+                Console.Write($"\r\u001b[2K{result}\n");
+            }
+        }
+    }
 
     private static int ListApplications()
     {
@@ -485,10 +681,14 @@ internal static class Program
             values = args;
             Command = args.FirstOrDefault(value => !value.StartsWith('-'))?.ToLowerInvariant();
             Silent = Has("--silent");
+            Verbose = Has("--verbose");
+            DryRun = Has("--dryrun", "--dry-run");
         }
 
         public string? Command { get; }
         public bool Silent { get; }
+        public bool Verbose { get; }
+        public bool DryRun { get; }
         public IReadOnlyList<string> Positionals => values.Where(value => !value.StartsWith('-')).ToArray();
 
         public bool Has(params string[] options) => values.Any(value => options.Contains(value, StringComparer.OrdinalIgnoreCase));
