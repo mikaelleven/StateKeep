@@ -1,0 +1,10 @@
+version: 1
+id: chrome
+name: Google Chrome
+
+roots:
+  - name: user-data
+    path: "%LOCALAPPDATA%\\Google\\Chrome\\User Data"
+
+include:
+  - "**/Bookmarks"
