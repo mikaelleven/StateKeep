@@ -48,6 +48,16 @@ internal static class Program
             return Setup(arguments.Positionals.Skip(1).FirstOrDefault());
         }
 
+        if (string.Equals(arguments.Command, "status", StringComparison.OrdinalIgnoreCase))
+        {
+            return Status();
+        }
+
+        if (string.Equals(arguments.Command, "validate", StringComparison.OrdinalIgnoreCase))
+        {
+            return Validate();
+        }
+
         WarnIfBackupPathIsNotConfigured();
 
         if (!arguments.Silent)
@@ -199,6 +209,127 @@ internal static class Program
 
     private static string QuoteYamlValue(string value) =>
         $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"") }\"";
+
+    private static int Status()
+    {
+        var configPath = GetConfigPath();
+        var config = ReadConfiguration(configPath);
+
+        Console.WriteLine("StateKeep status");
+        Console.WriteLine($"Configuration: {configPath}");
+
+        if (!config.Exists)
+        {
+            Console.WriteLine("Configuration status: not found");
+            Console.WriteLine("Backup path: not configured");
+            return Success;
+        }
+
+        Console.WriteLine("Configuration status: found");
+        if (config.BackupPath is null)
+        {
+            Console.WriteLine("Backup path: not configured");
+            return Success;
+        }
+
+        var expandedPath = Environment.ExpandEnvironmentVariables(config.BackupPath);
+        Console.WriteLine($"Backup path: {config.BackupPath}");
+        Console.WriteLine($"Resolved path: {expandedPath}");
+        Console.WriteLine($"Path status: {(Directory.Exists(expandedPath) ? "exists" : "does not exist")}");
+        return Success;
+    }
+
+    private static int Validate()
+    {
+        var configPath = GetConfigPath();
+        var config = ReadConfiguration(configPath);
+        var errors = new List<string>();
+
+        if (!config.Exists)
+        {
+            errors.Add($"Configuration file was not found: {configPath}");
+        }
+        else
+        {
+            if (config.Version is null)
+            {
+                errors.Add("Missing required field: version");
+            }
+            else if (config.Version != "1")
+            {
+                errors.Add($"Unsupported configuration version: {config.Version}");
+            }
+
+            if (string.IsNullOrWhiteSpace(config.BackupPath))
+            {
+                errors.Add("Missing required field: backupPath");
+            }
+            else
+            {
+                var expandedPath = Environment.ExpandEnvironmentVariables(config.BackupPath);
+                if (expandedPath.Contains('%'))
+                {
+                    errors.Add($"Backup path contains an undefined environment variable: {config.BackupPath}");
+                }
+            }
+        }
+
+        if (errors.Count == 0)
+        {
+            Console.WriteLine("Configuration is valid.");
+            return Success;
+        }
+
+        Console.Error.WriteLine("Configuration is invalid:");
+        foreach (var error in errors)
+        {
+            Console.Error.WriteLine($"- {error}");
+        }
+
+        return UsageError;
+    }
+
+    private static Configuration ReadConfiguration(string configPath)
+    {
+        if (!File.Exists(configPath))
+        {
+            return new Configuration(false, null, null);
+        }
+
+        string? version = null;
+        string? backupPath = null;
+        foreach (var line in File.ReadLines(configPath))
+        {
+            var versionMatch = Regex.Match(line, @"^\s*version\s*:\s*(?<value>[^#]+?)\s*(?:#.*)?$");
+            if (versionMatch.Success)
+            {
+                version = Unquote(versionMatch.Groups["value"].Value.Trim());
+            }
+
+            var backupPathMatch = Regex.Match(line, @"^\s*(?:backupPath|backup_path)\s*:\s*(?<value>.+?)\s*(?:#.*)?$");
+            if (backupPathMatch.Success)
+            {
+                backupPath = Unquote(backupPathMatch.Groups["value"].Value.Trim());
+            }
+        }
+
+        return new Configuration(true, version, backupPath);
+    }
+
+    private static string Unquote(string value)
+    {
+        if (value.Length < 2 || (value[0] != '"' && value[0] != '\'') || value[^1] != value[0])
+        {
+            return value;
+        }
+
+        var content = value[1..^1];
+        return value[0] == '"'
+            ? content.Replace("\\\\", "\\").Replace("\\\"", "\"")
+            : content.Replace("''", "'");
+    }
+
+    private sealed record Configuration(bool Exists, string? Version, string? BackupPath);
 
     private static void WarnIfBackupPathIsNotConfigured()
     {
