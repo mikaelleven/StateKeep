@@ -58,6 +58,11 @@ internal static class Program
             return Validate();
         }
 
+        if (string.Equals(arguments.Command, "list", StringComparison.OrdinalIgnoreCase))
+        {
+            return ListApplications();
+        }
+
         WarnIfBackupPathIsNotConfigured();
 
         if (!arguments.Silent)
@@ -209,6 +214,63 @@ internal static class Program
 
     private static string QuoteYamlValue(string value) =>
         $"\"{value.Replace("\\", "\\\\").Replace("\"", "\\\"") }\"";
+
+    private static int ListApplications()
+    {
+        var appsDirectory = Path.Combine(AppContext.BaseDirectory, "apps");
+        if (!Directory.Exists(appsDirectory))
+        {
+            WriteError($"Application definition directory was not found: {appsDirectory}");
+            return UsageError;
+        }
+
+        var applications = Directory.EnumerateFiles(appsDirectory, "*.yaml")
+            .Concat(Directory.EnumerateFiles(appsDirectory, "*.yml"))
+            .Select(ReadApplicationDefinition)
+            .OrderBy(application => application.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (applications.Length == 0)
+        {
+            Console.WriteLine("No application definitions found.");
+            return Success;
+        }
+
+        Console.WriteLine("Known applications:");
+        foreach (var application in applications)
+        {
+            Console.WriteLine($"  {application.Id,-16} {application.Name}");
+        }
+
+        return Success;
+    }
+
+    private static ApplicationDefinition ReadApplicationDefinition(string path)
+    {
+        string? id = null;
+        string? name = null;
+
+        foreach (var line in File.ReadLines(path))
+        {
+            var idMatch = Regex.Match(line, @"^\s*id\s*:\s*(?<value>[^#]+?)\s*(?:#.*)?$");
+            if (idMatch.Success)
+            {
+                id = Unquote(idMatch.Groups["value"].Value.Trim());
+            }
+
+            var nameMatch = Regex.Match(line, @"^\s*name\s*:\s*(?<value>[^#]+?)\s*(?:#.*)?$");
+            if (nameMatch.Success)
+            {
+                name = Unquote(nameMatch.Groups["value"].Value.Trim());
+            }
+        }
+
+        return new ApplicationDefinition(
+            id ?? Path.GetFileNameWithoutExtension(path),
+            name ?? "(unnamed)");
+    }
+
+    private sealed record ApplicationDefinition(string Id, string Name);
 
     private static int Status()
     {

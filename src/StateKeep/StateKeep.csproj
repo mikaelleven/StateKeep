@@ -7,4 +7,9 @@
     <Nullable>enable</Nullable>
     <RootNamespace>StateKeep</RootNamespace>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="../../apps/**/*.yaml" LinkBase="apps" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="../../apps/**/*.yml" LinkBase="apps" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
