@@ -310,16 +310,17 @@ internal static class Program
                     var files = Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories)
                         .Where(file => MatchesFilters(Path.GetRelativePath(source, file), app.Include, app.Exclude))
                         .ToArray();
-                    spinner.Detail($"Scanning file {(files.FirstOrDefault() is null ? "(none)" : Path.GetFileName(files[0]))}");
                     var destination = Path.Combine(backupRoot, app.Id, root.Name);
                     foreach (var file in files)
                     {
                         var relative = Path.GetRelativePath(source, file);
-                        var target = Path.Combine(destination, relative);
-                        if (arguments.Verbose)
+                        spinner.Detail(relative);
+                        if (arguments.Verbose && arguments.DryRun)
                         {
-                            Console.WriteLine($"{(arguments.DryRun ? "Would copy" : "Copying")} {file} -> {target}");
+                            spinner.WouldCopy(relative);
                         }
+
+                        var target = Path.Combine(destination, relative);
                         if (!arguments.DryRun)
                         {
                             Directory.CreateDirectory(Path.GetDirectoryName(target)!);
@@ -327,7 +328,7 @@ internal static class Program
                         }
                         appCopied++;
                     }
-                    spinner.Complete(true, $"{appCopied} file{(appCopied == 1 ? "" : "s")}");
+                    spinner.Complete(true, $"{appCopied} file{(appCopied == 1 ? "" : "s")} found");
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
@@ -336,17 +337,17 @@ internal static class Program
                 }
             }
 
-            if (!arguments.DryRun) copied += appCopied;
+            copied += appCopied;
             if (!arguments.Silent)
             {
-                Console.WriteLine($"{(failed ? "✗" : "✓")} {app.Name}: {appCopied} file{(appCopied == 1 ? "" : "s")} {(arguments.DryRun ? "checked" : "copied")}");
+                Console.WriteLine($"{(failed ? "✗" : "✓")} {app.Name}: {appCopied} changed files");
             }
             if (!failed) successful++;
         }
 
         if (!arguments.Silent)
         {
-            Console.WriteLine($"Completed: {scanned} apps scanned, {successful} successful, {copied} files copied{(arguments.DryRun ? " (dry-run; files were only checked)" : "")}.");
+            Console.WriteLine($"Completed: {scanned} apps scanned, {successful} successful, {(arguments.DryRun ? $"{copied} files would have been copied" : $"{copied} files copied")}.");
         }
         return successful == scanned ? Success : 1;
     }
@@ -503,6 +504,7 @@ internal static class Program
         private readonly string label;
         private readonly bool persist;
         private bool hasDetail;
+        private int wouldCopyCount;
 
         public ProgressLine(bool silent, string label, bool persist)
         {
@@ -515,7 +517,14 @@ internal static class Program
         {
             if (!silent)
             {
-                Console.Write($"| {label}");
+                if (persist)
+                {
+                    Console.Write($"| {label}");
+                }
+                else
+                {
+                    Console.Write($"| {label}");
+                }
             }
         }
 
@@ -523,9 +532,26 @@ internal static class Program
         {
             if (!silent)
             {
-                hasDetail = true;
-                Console.WriteLine();
-                Console.Write($"  Scanning file {text}");
+                if (hasDetail || wouldCopyCount > 0)
+                {
+                    Console.Write($"\r\u001b[2K  Scanning file {text}");
+                }
+                else
+                {
+                    hasDetail = true;
+                    Console.WriteLine();
+                    Console.Write($"  Scanning file {text}");
+                }
+            }
+        }
+
+        public void WouldCopy(string relativePath)
+        {
+            if (!silent)
+            {
+                Console.Write($"\r\u001b[2K  Would copy {relativePath}\n");
+                hasDetail = false;
+                wouldCopyCount++;
             }
         }
 
@@ -554,8 +580,21 @@ internal static class Program
             var result = $"{(ok ? "✓" : "✗")} {label}: {text}";
             if (hasDetail)
             {
-                // Replace the temporary detail line, then replace the spinner line.
-                Console.Write($"\r\u001b[2K\u001b[1A\r\u001b[2K{result}\n");
+                // Clear the temporary scan line before writing the final line below it.
+                Console.Write("\r\u001b[2K");
+            }
+
+            if (wouldCopyCount > 0)
+            {
+                // Replace the spinner, then leave the cursor below persistent per-file
+                // messages for the per-app result.
+                var linesToSpinner = wouldCopyCount + 1;
+                Console.Write($"\u001b[{linesToSpinner}A\r\u001b[2K{result}\u001b[{linesToSpinner}B\r");
+            }
+            else if (hasDetail)
+            {
+                // Replace the spinner and leave the cursor below it for the app result.
+                Console.Write($"\u001b[1A\r\u001b[2K{result}\u001b[1B\r");
             }
             else
             {
