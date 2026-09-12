@@ -1,0 +1,18 @@
+version: 1
+id: codex
+name: Codex
+
+roots:
+  - name: user-data
+    path: "%USERPROFILE%\\.codex"
+    evidence:
+      any:
+        - directory: "sessions"
+        - directory: "memories"
+        - directory: "skills"
+
+include:
+  - "config.toml"
+  - "sessions/**"
+  - "memories/**"
+  - "skills/**"

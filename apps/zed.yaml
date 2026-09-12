@@ -1,0 +1,19 @@
+version: 1
+id: zed
+name: Zed
+
+roots:
+  - name: user-data
+    path: "%APPDATA%\\Zed"
+    evidence:
+      any:
+        - file: "settings.json"
+        - file: "keymap.json"
+        - file: "tasks.json"
+        - directory: "snippets"
+
+include:
+  - "settings.json"
+  - "keymap.json"
+  - "tasks.json"
+  - "snippets/**"

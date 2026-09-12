@@ -1,0 +1,15 @@
+version: 1
+id: blender
+name: Blender
+
+roots:
+  - name: user-data
+    path: "%APPDATA%\\Blender Foundation\\Blender"
+    evidence:
+      any:
+        - directory: "config"
+        - directory: "scripts"
+
+include:
+  - "**/config/**"
+  - "**/scripts/**"
