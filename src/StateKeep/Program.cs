@@ -667,8 +667,10 @@ internal static class Program
 
         Console.WriteLine("StateKeep status");
         Console.WriteLine($"Configuration: {configPath}");
-        var deviceId = ReadDeviceId();
-        Console.WriteLine($"Device ID: {deviceId ?? "not generated"}");
+        var computerName = Environment.MachineName;
+        var deviceId = ReadDeviceId() ?? EnsureDeviceId();
+        Console.WriteLine($"Computer name: {computerName}");
+        Console.WriteLine($"Device ID: {deviceId}");
 
         if (!config.Exists)
         {
@@ -685,9 +687,10 @@ internal static class Program
         }
 
         var expandedPath = Environment.ExpandEnvironmentVariables(config.BackupPath);
+        var resolvedPath = Path.Combine(expandedPath, $"{computerName}_{deviceId}");
         Console.WriteLine($"Backup path: {config.BackupPath}");
-        Console.WriteLine($"Resolved path: {expandedPath}");
-        Console.WriteLine($"Path status: {(Directory.Exists(expandedPath) ? "exists" : "does not exist")}");
+        Console.WriteLine($"Resolved path: {resolvedPath}");
+        Console.WriteLine($"Path status: {(Directory.Exists(resolvedPath) ? "exists" : "does not exist")}");
         return Success;
     }
 
