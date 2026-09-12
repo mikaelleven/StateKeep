@@ -1,0 +1,15 @@
+version: 1
+id: raw-accel
+name: Raw Accel
+
+roots:
+  - name: installation
+    path: "%PROGRAMFILES%\\Raw Accel"
+    evidence:
+      any:
+        - file: "settings.json"
+        - file: ".config"
+
+include:
+  - "settings.json"
+  - ".config"

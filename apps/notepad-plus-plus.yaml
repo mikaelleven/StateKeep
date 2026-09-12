@@ -1,0 +1,30 @@
+version: 1
+id: notepad-plus-plus
+name: Notepad++
+
+roots:
+  - name: user
+    path: "%APPDATA%\\Notepad++"
+    evidence:
+      any:
+        - file: "config.xml"
+        - file: "shortcuts.xml"
+        - file: "stylers.xml"
+        - file: "langs.xml"
+
+include:
+  - "config.xml"
+  - "shortcuts.xml"
+  - "contextMenu.xml"
+  - "tabContextMenu.xml"
+  - "stylers.xml"
+  - "langs.xml"
+  - "nativeLang.xml"
+  - "disableNppAutoUpdate.xml"
+  - "enableSelectFgColor.xml"
+  - "noRestartAutomatically.xml"
+  - "themes/**"
+  - "userDefineLang/**"
+  - "functionList/**"
+  - "toolbarIcons/**"
+  - "toolbarButtonsConf.xml"
