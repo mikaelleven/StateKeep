@@ -1,0 +1,13 @@
+version: 1
+id: microsoft-powertoys
+name: Microsoft PowerToys
+
+roots:
+  - name: user-data
+    path: "%LOCALAPPDATA%\\Microsoft\\PowerToys"
+    evidence:
+      all:
+        - directory: "Settings"
+
+include:
+  - "Settings/**"

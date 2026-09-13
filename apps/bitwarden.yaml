@@ -1,0 +1,15 @@
+version: 1
+id: bitwarden
+name: Bitwarden
+
+roots:
+  - name: desktop-data
+    path:
+      - "%APPDATA%\\Bitwarden"
+      - "%LOCALAPPDATA%\\Packages\\8bitSolutionsLLC.bitwardendesktop_h4e712dmw3xy\\LocalCache\\Roaming\\Bitwarden"
+    evidence:
+      all:
+        - file: "data.json"
+
+include:
+  - "data.json"

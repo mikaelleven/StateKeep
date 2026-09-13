@@ -1,0 +1,13 @@
+version: 1
+id: f-lux
+name: f.lux
+
+roots:
+  - name: user-data
+    path: "%LOCALAPPDATA%\\FluxSoftware\\Flux"
+    evidence:
+      any:
+        - file: "flux.exe"
+
+include:
+  - "media/**"
