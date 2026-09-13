@@ -1,0 +1,27 @@
+version: 1
+id: giants-editor
+name: GIANTS Editor
+
+roots:
+  - name: user-data
+    path: "%LOCALAPPDATA%"
+    evidence:
+      any:
+        - directory: "GIANTS Editor 64bit 8.2.2"
+        - directory: "GIANTS Editor 64bit 9.0.4"
+        - directory: "GIANTS Editor 64bit 10.0.2"
+        - directory: "GIANTS Editor 64bit 10.0.13"
+
+include:
+  - "GIANTS Editor 64bit */**"
+
+exclude:
+  - "**/*.7z"
+  - "**/*.bin"
+  - "**/*.dll"
+  - "**/*.exe"
+  - "**/*.lib"
+  - "**/*.pak"
+  - "**/*.pdb"
+  - "**/shader_cache/**"
+  - "**/scripts.old/**"
