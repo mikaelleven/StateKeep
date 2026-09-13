@@ -1,0 +1,18 @@
+version: 1
+id: hyperx
+name: HyperX NGENUITY
+
+roots:
+  - name: user-data
+    path:
+      - "%LOCALAPPDATA%\\HyperX\\NGENUITY"
+      - "%APPDATA%\\HyperX\\NGENUITY"
+      - "%LOCALAPPDATA%\\HyperX\\NGenuity"
+      - "%APPDATA%\\HyperX\\NGenuity"
+      - "%LOCALAPPDATA%\\NGENUITY"
+      - "%APPDATA%\\NGENUITY"
+
+exclude:
+  - "Cache/**"
+  - "Logs/**"
+  - "Crashpad/**"

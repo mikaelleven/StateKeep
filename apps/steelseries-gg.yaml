@@ -1,0 +1,15 @@
+version: 1
+id: steelseries-gg
+name: SteelSeries GG
+
+roots:
+  - name: user-data
+    path:
+      - "%APPDATA%\\SteelSeries\\GG"
+      - "%LOCALAPPDATA%\\SteelSeries\\GG"
+      - "%PROGRAMDATA%\\SteelSeries\\GG"
+
+exclude:
+  - "Cache/**"
+  - "Logs/**"
+  - "Crashpad/**"
