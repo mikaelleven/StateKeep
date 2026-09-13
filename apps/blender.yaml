@@ -11,5 +11,5 @@ roots:
         - directory: "scripts"
 
 include:
-  - "**/config/**"
-  - "**/scripts/**"
+  - "*/config/**"
+  - "*/scripts/**"

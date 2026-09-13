@@ -321,6 +321,9 @@ internal static class Program
                     var destination = app.Roots.Count == 1
                         ? Path.Combine(backupRoot, app.Id)
                         : Path.Combine(backupRoot, app.Id, root.Name);
+                    var selectedRelativePaths = files
+                        .Select(file => Path.GetRelativePath(source, file))
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
                     foreach (var file in files)
                     {
                         var relative = Path.GetRelativePath(source, file);
@@ -352,6 +355,12 @@ internal static class Program
                         }
                         appCopied++;
                     }
+
+                    if (!arguments.DryRun)
+                    {
+                        RemoveObsoleteBackupFiles(destination, selectedRelativePaths);
+                    }
+
                     spinner.Complete(true, $"{files.Length} file{(files.Length == 1 ? "" : "s")} found");
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -374,6 +383,37 @@ internal static class Program
             Console.WriteLine($"Completed: {scanned} apps scanned, {successful} successful, {(arguments.DryRun ? $"{copied} files would have been copied" : $"{copied} files copied")}.");
         }
         return successful == scanned ? Success : 1;
+    }
+
+    private static void RemoveObsoleteBackupFiles(string destination, ISet<string> selectedRelativePaths)
+    {
+        if (!Directory.Exists(destination))
+        {
+            return;
+        }
+
+        var options = new EnumerationOptions
+        {
+            RecurseSubdirectories = true,
+            IgnoreInaccessible = true,
+            AttributesToSkip = FileAttributes.ReparsePoint
+        };
+        var obsoleteFiles = Directory.EnumerateFiles(destination, "*", options)
+            .Where(file => !selectedRelativePaths.Contains(Path.GetRelativePath(destination, file)))
+            .ToArray();
+        foreach (var file in obsoleteFiles)
+        {
+            File.Delete(file);
+        }
+
+        foreach (var directory in Directory.EnumerateDirectories(destination, "*", options)
+                     .OrderByDescending(path => path.Length))
+        {
+            if (!Directory.EnumerateFileSystemEntries(directory).Any())
+            {
+                Directory.Delete(directory);
+            }
+        }
     }
 
     private static bool FileNeedsUpdate(string source, string target)
