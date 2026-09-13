@@ -1,0 +1,31 @@
+version: 1
+id: powershell
+name: PowerShell and Oh My Posh
+
+roots:
+  - name: powershell
+    path: "%USERPROFILE%\\Documents\\PowerShell"
+    evidence:
+      any:
+        - file: "Profile.ps1"
+        - file: "Microsoft.PowerShell_profile.ps1"
+
+  - name: windows-powershell
+    path: "%USERPROFILE%\\Documents\\WindowsPowerShell"
+    evidence:
+      any:
+        - file: "Profile.ps1"
+        - file: "Microsoft.PowerShell_profile.ps1"
+
+  - name: oh-my-posh-themes
+    path: "%LOCALAPPDATA%\\Programs\\oh-my-posh\\themes"
+    evidence:
+      any:
+        - file: "jandedobbeleer.omp.json"
+        - file: "paradox.omp.json"
+
+include:
+  - "*.ps1"
+  - "*.omp.json"
+  - "*.omp.yaml"
+  - "*.omp.toml"
