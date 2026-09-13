@@ -56,6 +56,11 @@ internal static class Program
             return Backup(arguments);
         }
 
+        if (string.Equals(arguments.Command, "restore", StringComparison.OrdinalIgnoreCase))
+        {
+            return Restore(arguments);
+        }
+
         if (string.Equals(arguments.Command, "status", StringComparison.OrdinalIgnoreCase))
         {
             return Status();
@@ -140,6 +145,8 @@ internal static class Program
         Console.WriteLine("      --silent       Suppress normal console output");
         Console.WriteLine("      --verbose      Write copied files to stdout");
         Console.WriteLine("      --dryrun       Check files without copying");
+        Console.WriteLine("      --force        Overwrite conflicting files after backing them up");
+        Console.WriteLine("      --from <id>    Restore from a device ID, computer name, or device folder");
     }
 
     private static int Setup(string? requestedPath)
@@ -383,6 +390,268 @@ internal static class Program
             Console.WriteLine($"Completed: {scanned} apps scanned, {successful} successful, {(arguments.DryRun ? $"{copied} files would have been copied" : $"{copied} files copied")}.");
         }
         return successful == scanned ? Success : 1;
+    }
+
+    private static int Restore(Arguments arguments)
+    {
+        var configuration = ReadConfiguration(GetConfigPath());
+        if (!configuration.Exists || string.IsNullOrWhiteSpace(configuration.BackupPath))
+        {
+            WriteError("A configured backup path is required. Run \"statekeep setup\" first.");
+            return UsageError;
+        }
+
+        var appDirectory = Path.Combine(AppContext.BaseDirectory, "apps");
+        if (!Directory.Exists(appDirectory))
+        {
+            WriteError($"Application definition directory was not found: {appDirectory}");
+            return UsageError;
+        }
+
+        var requestedApp = arguments.Positionals.Skip(1).FirstOrDefault();
+        var restoreAll = arguments.Has("--all");
+        if (requestedApp is not null && restoreAll)
+        {
+            WriteError("Specify either an application or --all, not both.");
+            return UsageError;
+        }
+
+        if (requestedApp is null && !restoreAll)
+        {
+            WriteError("Specify an application or --all.");
+            return UsageError;
+        }
+
+        var applications = Directory.EnumerateFiles(appDirectory, "*.yaml")
+            .Concat(Directory.EnumerateFiles(appDirectory, "*.yml"))
+            .Select(ReadBackupDefinition)
+            .Where(app => restoreAll || string.Equals(app.Id, requestedApp, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(app => app.Id, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (applications.Length == 0)
+        {
+            WriteError($"No application definition found for '{requestedApp}'.");
+            return UsageError;
+        }
+
+        var backupBasePath = Environment.ExpandEnvironmentVariables(configuration.BackupPath);
+        var sourceDevice = FindRestoreDevice(backupBasePath, arguments.From);
+        if (sourceDevice is null)
+        {
+            return UsageError;
+        }
+
+        var failures = 0;
+        var restored = 0;
+        foreach (var app in applications)
+        {
+            try
+            {
+                var appRestored = 0;
+                foreach (var root in app.Roots)
+                {
+                    var source = app.Roots.Count == 1
+                        ? Path.Combine(sourceDevice, "apps", app.Id)
+                        : Path.Combine(sourceDevice, "apps", app.Id, root.Name);
+                    if (!Directory.Exists(source))
+                    {
+                        continue;
+                    }
+
+                    var destination = ResolveRestoreTarget(root, arguments);
+                    if (destination is null)
+                    {
+                        failures++;
+                        continue;
+                    }
+
+                    foreach (var file in Directory.EnumerateFiles(source, "*", new EnumerationOptions
+                             {
+                                 RecurseSubdirectories = true,
+                                 IgnoreInaccessible = true,
+                                 AttributesToSkip = FileAttributes.ReparsePoint
+                             }))
+                    {
+                        var relative = Path.GetRelativePath(source, file);
+                        if (!MatchesFilters(relative, app.Include, app.Exclude))
+                        {
+                            continue;
+                        }
+
+                        var target = Path.Combine(destination, relative);
+                        if (File.Exists(target) && FilesAreIdentical(file, target))
+                        {
+                            continue;
+                        }
+
+                        if (File.Exists(target) && !arguments.Force)
+                        {
+                            WriteRestoreConflict(relative, file, target, arguments.Silent);
+                            failures++;
+                            continue;
+                        }
+
+                        if (arguments.DryRun)
+                        {
+                            if (!arguments.Silent)
+                            {
+                                Console.WriteLine($"Would restore {app.Name}: {relative}");
+                            }
+                            appRestored++;
+                            continue;
+                        }
+
+                        Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                        if (File.Exists(target))
+                        {
+                            var safetyCopy = GetBackupFilePath(target);
+                            File.Copy(target, safetyCopy, false);
+                            if (!arguments.Silent)
+                            {
+                                Console.WriteLine($"Backed up existing file: {safetyCopy}");
+                            }
+                        }
+
+                        File.Copy(file, target, true);
+                        File.SetLastWriteTimeUtc(target, File.GetLastWriteTimeUtc(file));
+                        appRestored++;
+                    }
+                }
+
+                restored += appRestored;
+                if (!arguments.Silent)
+                {
+                    Console.WriteLine($"{app.Name}: {(arguments.DryRun ? appRestored + " files would be restored" : appRestored + " files restored")}");
+                }
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                failures++;
+                WriteError($"Could not restore {app.Name}: {exception.Message}");
+            }
+        }
+
+        if (!arguments.Silent)
+        {
+            Console.WriteLine(arguments.DryRun
+                ? $"Completed: {restored} files would be restored."
+                : $"Completed: {restored} files restored.");
+        }
+        return failures == 0 ? Success : 1;
+    }
+
+    private static string? FindRestoreDevice(string backupBasePath, string? requestedDevice)
+    {
+        if (!Directory.Exists(backupBasePath))
+        {
+            WriteError($"Backup path was not found: {backupBasePath}");
+            return null;
+        }
+
+        var deviceDirectories = Directory.EnumerateDirectories(backupBasePath).ToArray();
+        var device = requestedDevice is null
+            ? $"{Environment.MachineName}_{EnsureDeviceId()}"
+            : requestedDevice;
+        var matches = deviceDirectories.Where(path =>
+        {
+            var name = Path.GetFileName(path);
+            return string.Equals(name, device, StringComparison.OrdinalIgnoreCase)
+                || name.StartsWith(device + "_", StringComparison.OrdinalIgnoreCase)
+                || name.EndsWith("_" + device, StringComparison.OrdinalIgnoreCase);
+        }).ToArray();
+
+        if (matches.Length == 1)
+        {
+            return matches[0];
+        }
+
+        WriteError(matches.Length == 0
+            ? $"No backup device matched '{device}'."
+            : $"Backup device '{device}' is ambiguous. Use its full computer-name_device-id folder name.");
+        return null;
+    }
+
+    private static string? ResolveRestoreTarget(BackupRoot root, Arguments arguments)
+    {
+        var paths = root.Paths.Select(Environment.ExpandEnvironmentVariables).ToArray();
+        if (paths.Length == 1)
+        {
+            return paths[0];
+        }
+
+        var matchingPath = paths.FirstOrDefault(path => Directory.Exists(path) && EvidenceMatches(path, root.Evidence));
+        if (matchingPath is not null)
+        {
+            return matchingPath;
+        }
+
+        if (arguments.Silent)
+        {
+            WriteError($"Could not identify a restore target for root '{root.Name}' without prompting.");
+            return null;
+        }
+
+        Console.WriteLine($"No known path matched the evidence for '{root.Name}'.");
+        Console.WriteLine($"1. Use the first configured path: {paths[0]}");
+        Console.WriteLine("2. Enter a custom path");
+        Console.Write("Choose [1/2]: ");
+        var choice = Console.ReadLine()?.Trim();
+        if (choice == "1")
+        {
+            return paths[0];
+        }
+
+        if (choice == "2")
+        {
+            Console.Write("Custom restore path: ");
+            var customPath = Console.ReadLine()?.Trim();
+            return string.IsNullOrWhiteSpace(customPath) ? null : Environment.ExpandEnvironmentVariables(customPath);
+        }
+
+        WriteError("Restore target selection was cancelled.");
+        return null;
+    }
+
+    private static bool FilesAreIdentical(string source, string target)
+    {
+        var sourceInfo = new FileInfo(source);
+        var targetInfo = new FileInfo(target);
+        if (sourceInfo.Length != targetInfo.Length)
+        {
+            return false;
+        }
+
+        using var sourceStream = File.OpenRead(source);
+        using var targetStream = File.OpenRead(target);
+        return CryptographicOperations.FixedTimeEquals(SHA256.HashData(sourceStream), SHA256.HashData(targetStream));
+    }
+
+    private static string GetBackupFilePath(string target)
+    {
+        var candidate = target + ".bak";
+        return File.Exists(candidate)
+            ? candidate + "." + DateTime.Now.ToString("yyyyMMdd-HHmmssfff")
+            : candidate;
+    }
+
+    private static void WriteRestoreConflict(string relative, string source, string target, bool silent)
+    {
+        if (silent)
+        {
+            return;
+        }
+
+        static string Metadata(string path)
+        {
+            var info = new FileInfo(path);
+            using var stream = File.OpenRead(path);
+            return $"Size: {info.Length:N0} bytes, Modified: {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}, SHA-256: {Convert.ToHexString(SHA256.HashData(stream))}";
+        }
+
+        Console.WriteLine($"Conflict: {relative}");
+        Console.WriteLine($"  Source:      {Metadata(source)}");
+        Console.WriteLine($"  Destination: {Metadata(target)}");
+        Console.WriteLine("Skipped. Use --force to overwrite after creating a .bak file.");
     }
 
     private static void RemoveObsoleteBackupFiles(string destination, ISet<string> selectedRelativePaths)
@@ -1023,14 +1292,30 @@ internal static class Program
             Silent = Has("--silent");
             Verbose = Has("--verbose");
             DryRun = Has("--dryrun", "--dry-run");
+            Force = Has("--force");
+            From = GetValue("--from");
         }
 
         public string? Command { get; }
         public bool Silent { get; }
         public bool Verbose { get; }
         public bool DryRun { get; }
-        public IReadOnlyList<string> Positionals => values.Where(value => !value.StartsWith('-')).ToArray();
+        public bool Force { get; }
+        public string? From { get; }
+        public IReadOnlyList<string> Positionals => values.Where((value, index) =>
+            !value.StartsWith('-') && (index == 0 || !string.Equals(values[index - 1], "--from", StringComparison.OrdinalIgnoreCase))).ToArray();
 
         public bool Has(params string[] options) => values.Any(value => options.Contains(value, StringComparer.OrdinalIgnoreCase));
+
+        private string? GetValue(string option)
+        {
+            var index = Array.FindIndex(values, value => string.Equals(value, option, StringComparison.OrdinalIgnoreCase));
+            if (index < 0 || index == values.Length - 1 || values[index + 1].StartsWith('-'))
+            {
+                return null;
+            }
+
+            return values[index + 1];
+        }
     }
 }

@@ -26,6 +26,20 @@ statekeep restore vscode
 statekeep restore --all
 ```
 
+### Restore from another device
+
+```powershell
+statekeep restore vscode --from OTHER-PC
+statekeep restore vscode --from A7K3M9Q2
+statekeep restore vscode --from OTHER-PC_A7K3M9Q2
+```
+
+### Preview a restore
+
+```powershell
+statekeep restore vscode --dryrun
+```
+
 ### Force restore conflicts
 
 ```powershell
