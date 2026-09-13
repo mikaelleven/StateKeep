@@ -13,3 +13,6 @@ roots:
 include:
   - "*/config/**"
   - "*/scripts/**"
+
+exclude:
+  - "*/scripts/addons/**"
