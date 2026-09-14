@@ -1,0 +1,28 @@
+version: 1
+id: fs-mod-organizer
+name: FS Mod Organizer
+
+roots:
+  - name: user-data
+    path: "%APPDATA%\\FSModOrganizer"
+    evidence:
+      any:
+        - file: "appsettings.json"
+        - file: "appsettings.user.json"
+
+include:
+  - "appsettings*.json"
+  - "FSModOrganizer.db"
+
+exclude:
+  - "appsettings*.json.bak"
+  - "__backup/**"
+  - "cache/**"
+  - "wwwroot/**"
+  - "**/*.dll"
+  - "**/*.exe"
+  - "**/*.bin"
+  - "**/*.7z"
+  - "**/*.pdb"
+  - "**/*.lib"
+  - "**/*.pak"
