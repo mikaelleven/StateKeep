@@ -328,8 +328,9 @@ internal static class Program
 
                     if (string.Equals(app.Tool, "tmextract", StringComparison.OrdinalIgnoreCase))
                     {
-                        appCopied += BackupTampermonkeyScripts(app, root, source, backupRoot, arguments, spinner);
-                        spinner.Complete(true, "Tampermonkey scripts extracted");
+                        var extraction = BackupTampermonkeyScripts(app, root, source, backupRoot, arguments, spinner);
+                        appCopied += extraction.Updated;
+                        spinner.Complete(true, $"{extraction.Found} scripts found, {extraction.Updated} {(arguments.DryRun ? "would be extracted" : "extracted")}");
                         continue;
                     }
 
@@ -429,7 +430,7 @@ internal static class Program
             var copied = 0;
             foreach (var directory in scriptDirectories)
             {
-                copied += ExtractTampermonkeyScripts(directory, target, arguments.DryRun, arguments.Force, arguments.Silent, arguments.Verbose);
+                copied += ExtractTampermonkeyScripts(directory, target, arguments.DryRun, arguments.Force, arguments.Silent, arguments.Verbose).Updated;
             }
 
             if (!arguments.Silent)
@@ -475,7 +476,7 @@ internal static class Program
             .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
-    private static int BackupTampermonkeyScripts(BackupDefinition app, BackupRoot root, string source, string backupRoot, Arguments arguments, ProgressLine spinner)
+    private static ExtractionResult BackupTampermonkeyScripts(BackupDefinition app, BackupRoot root, string source, string backupRoot, Arguments arguments, ProgressLine spinner)
     {
         var directories = Directory.EnumerateFiles(source, "*.ldb", new EnumerationOptions
             {
@@ -491,17 +492,20 @@ internal static class Program
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
-        var copied = 0;
+        var found = 0;
+        var updated = 0;
         foreach (var directory in directories)
         {
             var relative = Path.GetRelativePath(source, directory);
             var target = Path.Combine(backupRoot, app.Id, root.Name, relative);
-            copied += ExtractTampermonkeyScripts(directory, target, arguments.DryRun, overwriteExisting: true, arguments.Silent, arguments.Verbose);
+            var extraction = ExtractTampermonkeyScripts(directory, target, arguments.DryRun, overwriteExisting: true, arguments.Silent, arguments.Verbose);
+            found += extraction.Found;
+            updated += extraction.Updated;
         }
-        return copied;
+        return new ExtractionResult(found, updated);
     }
 
-    private static int ExtractTampermonkeyScripts(string databaseDirectory, string targetDirectory, bool dryRun, bool overwriteExisting, bool silent, bool verbose)
+    private static ExtractionResult ExtractTampermonkeyScripts(string databaseDirectory, string targetDirectory, bool dryRun, bool overwriteExisting, bool silent, bool verbose)
     {
         var values = Directory.EnumerateFiles(databaseDirectory, "*.ldb")
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
@@ -544,7 +548,7 @@ internal static class Program
             }
             updated++;
         }
-        return updated;
+        return new ExtractionResult(scripts.Length, updated);
     }
 
     private static IEnumerable<ExtractedScript> ExtractScripts(byte[] value)
@@ -757,6 +761,7 @@ internal static class Program
         destination += length;
     }
 
+    private sealed record ExtractionResult(int Found, int Updated);
     private sealed record ExtractedScript(string FileName, string Source);
     private sealed record BlockHandle(ulong Offset, ulong Size);
     private sealed record LevelDbEntry(byte[] Key, byte[] Value);
