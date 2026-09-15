@@ -7,7 +7,7 @@ roots:
     path: "%LOCALAPPDATA%\\Microsoft\\PowerToys"
     evidence:
       all:
-        - directory: "Settings"
+        - "settings.json"
 
 include:
-  - "Settings/**"
+  - "*.json"
