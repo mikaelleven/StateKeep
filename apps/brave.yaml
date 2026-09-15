@@ -8,6 +8,7 @@ roots:
     evidence:
       any:
         - file: "Local State"
+        - file: "Default/Preferences"
 
 include:
   - "Default/Preferences"
