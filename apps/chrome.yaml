@@ -7,4 +7,11 @@ roots:
     path: "%LOCALAPPDATA%\\Google\\Chrome\\User Data"
 
 include:
-  - "**/Bookmarks"
+  - "Default/Preferences"
+  - "Default/Secure Preferences"
+  - "Default/Local Extension Settings/**"
+  - "Default/Bookmarks"
+  - "Profile */Preferences"
+  - "Profile */Secure Preferences"
+  - "Profile */Local Extension Settings/**"
+  - "Profile */Bookmarks"

@@ -11,6 +11,14 @@ roots:
         - file: "Local State"
         - file: "Default/Preferences"
 
+  - name: chrome
+    path: "%LOCALAPPDATA%\\Google\\Chrome\\User Data"
+    evidence:
+      any:
+        - file: "Local State"
+        - file: "Default/Preferences"
+
+
 include:
   - "Default/Local Extension Settings/dhdgffkkebhmkfjojejmpbldmpobfkfo"
   - "Profile */Local Extension Settings/dhdgffkkebhmkfjojejmpbldmpobfkfo"
