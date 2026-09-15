@@ -1,0 +1,18 @@
+version: 1
+id: brave
+name: Brave Browser
+
+roots:
+  - name: user-data
+    path: "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data"
+    evidence:
+      any:
+        - file: "Local State"
+
+include:
+  - "Default/Preferences"
+  - "Default/Secure Preferences"
+  - "Default/Local Extension Settings/**"
+  - "Profile */Preferences"
+  - "Profile */Secure Preferences"
+  - "Profile */Local Extension Settings/**"
