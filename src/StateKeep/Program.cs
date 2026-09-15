@@ -289,7 +289,7 @@ internal static class Program
             .ToArray();
 
         var backupRoot = Path.Combine(Environment.ExpandEnvironmentVariables(configuration.BackupPath),
-            $"{Environment.MachineName}_{EnsureDeviceId()}", "apps");
+            $"{Environment.MachineName}_{EnsureDeviceId()}");
         var scanned = 0;
         var successful = 0;
         var copied = 0;
@@ -451,8 +451,8 @@ internal static class Program
                 foreach (var root in app.Roots)
                 {
                     var source = app.Roots.Count == 1
-                        ? Path.Combine(sourceDevice, "apps", app.Id)
-                        : Path.Combine(sourceDevice, "apps", app.Id, root.Name);
+                        ? Path.Combine(sourceDevice, app.Id)
+                        : Path.Combine(sourceDevice, app.Id, root.Name);
                     if (!Directory.Exists(source))
                     {
                         continue;

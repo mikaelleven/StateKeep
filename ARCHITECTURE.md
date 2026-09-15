@@ -90,11 +90,10 @@ Application backups:
 
 ```text
 <device>\
-└── apps\
-    ├── vscode\
-    │   └── ...
-    └── zed\
-        └── ...
+├── vscode\
+│   └── ...\
+└── zed\
+    └── ...
 ```
 
 Relative paths below the detected application root are preserved.

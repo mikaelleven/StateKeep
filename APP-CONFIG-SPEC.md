@@ -203,10 +203,10 @@ include:
 A single selected root is stored directly below its application ID. When an application has multiple roots, each root is stored below its logical root name. Relative paths below the selected root are preserved.
 
 ```text
-apps\single-root-app\
+single-root-app\
 └── ...
 
-apps\multi-root-app\
+multi-root-app\
 ├── installation\
 │   └── ...
 └── user-data\
