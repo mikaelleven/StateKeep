@@ -45,9 +45,9 @@ def main() -> int:
         shutil.rmtree(destination)
     destination.mkdir(parents=True)
     binary_root = ROOT / "src" / "StateKeep" / "bin"
-    binary_source = binary_root / configuration / "net8.0"
+    binary_source = binary_root / configuration / "net10.0"
     if args.nobuild and not binary_source.is_dir():
-        candidates = [path for path in binary_root.glob("*/net8.0") if path.is_dir()]
+        candidates = [path for path in binary_root.glob("*/net10.0") if path.is_dir()]
         if candidates:
             binary_source = max(candidates, key=lambda path: path.stat().st_mtime)
             configuration = binary_source.parent.name
