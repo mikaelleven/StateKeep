@@ -14,6 +14,18 @@ statekeep backup
 statekeep backup vscode
 ```
 
+### Extract Tampermonkey user scripts
+
+```powershell
+statekeep tmextract brave
+statekeep tmextract "C:\\Users\\me\\AppData\\Local\\BraveSoftware\\Brave-Browser\\User Data\\Profile 2" "D:\\Backups\\tampermonkey_scripts" --force
+```
+
+The source defaults to the current directory and the destination defaults to
+`tampermonkey_scripts` below the current directory. `brave` and `chrome` resolve
+to their standard local user-data folders. Existing, different scripts are only
+overwritten with `--force`; `--dryrun` previews extraction without writing files.
+
 ### Restore one application
 
 ```powershell

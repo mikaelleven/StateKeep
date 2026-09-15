@@ -1,0 +1,16 @@
+version: 1
+id: tampermonkey
+name: Tampermonkey Scripts
+tool: tmextract
+
+roots:
+  - name: brave
+    path: "%LOCALAPPDATA%\\BraveSoftware\\Brave-Browser\\User Data"
+    evidence:
+      any:
+        - file: "Local State"
+        - file: "Default/Preferences"
+
+include:
+  - "Default/Local Extension Settings/dhdgffkkebhmkfjojejmpbldmpobfkfo"
+  - "Profile */Local Extension Settings/dhdgffkkebhmkfjojejmpbldmpobfkfo"

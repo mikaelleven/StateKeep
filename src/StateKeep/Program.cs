@@ -2,6 +2,8 @@ using System.ComponentModel;
 using System.Diagnostics;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace StateKeep;
@@ -56,6 +58,11 @@ internal static class Program
             return Backup(arguments);
         }
 
+        if (string.Equals(arguments.Command, "tmextract", StringComparison.OrdinalIgnoreCase))
+        {
+            return TampermonkeyExtract(arguments);
+        }
+
         if (string.Equals(arguments.Command, "restore", StringComparison.OrdinalIgnoreCase))
         {
             return Restore(arguments);
@@ -89,6 +96,7 @@ internal static class Program
     private static readonly HashSet<string> Commands = new(StringComparer.OrdinalIgnoreCase)
     {
         "backup",
+        "tmextract",
         "restore",
         "apps",
         "status",
@@ -130,6 +138,7 @@ internal static class Program
         Console.WriteLine();
         Console.WriteLine("Commands:");
         Console.WriteLine("  backup [app]       Back up all applications or one application");
+        Console.WriteLine("  tmextract [profile|chrome|brave] [target]  Extract Tampermonkey scripts");
         Console.WriteLine("  restore [app]      Restore one application");
         Console.WriteLine("  restore --all      Restore all applications");
         Console.WriteLine("  apps list          List known applications");
@@ -317,6 +326,13 @@ internal static class Program
                         continue;
                     }
 
+                    if (string.Equals(app.Tool, "tmextract", StringComparison.OrdinalIgnoreCase))
+                    {
+                        appCopied += BackupTampermonkeyScripts(app, root, source, backupRoot, arguments, spinner);
+                        spinner.Complete(true, "Tampermonkey scripts extracted");
+                        continue;
+                    }
+
                     var files = Directory.EnumerateFiles(source, "*", new EnumerationOptions
                         {
                             RecurseSubdirectories = true,
@@ -391,6 +407,359 @@ internal static class Program
         }
         return successful == scanned ? Success : 1;
     }
+
+    private const string TampermonkeyExtensionId = "dhdgffkkebhmkfjojejmpbldmpobfkfo";
+
+    private static int TampermonkeyExtract(Arguments arguments)
+    {
+        var positional = arguments.Positionals.Skip(1).ToArray();
+        var source = positional.ElementAtOrDefault(0) ?? Directory.GetCurrentDirectory();
+        var target = positional.ElementAtOrDefault(1) ?? Path.Combine(Directory.GetCurrentDirectory(), "tampermonkey_scripts");
+        source = ResolveBrowserProfilePath(source);
+
+        try
+        {
+            var scriptDirectories = FindTampermonkeyDirectories(source).ToArray();
+            if (scriptDirectories.Length == 0)
+            {
+                WriteError($"No Tampermonkey .ldb files were found below: {source}");
+                return UsageError;
+            }
+
+            var copied = 0;
+            foreach (var directory in scriptDirectories)
+            {
+                copied += ExtractTampermonkeyScripts(directory, target, arguments.DryRun, arguments.Force, arguments.Silent, arguments.Verbose);
+            }
+
+            if (!arguments.Silent)
+            {
+                Console.WriteLine(arguments.DryRun
+                    ? $"Completed: {copied} scripts would be extracted."
+                    : $"Completed: {copied} scripts extracted.");
+            }
+            return Success;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException)
+        {
+            WriteError($"Could not extract Tampermonkey scripts: {exception.Message}");
+            return 1;
+        }
+    }
+
+    private static string ResolveBrowserProfilePath(string source) => source.ToLowerInvariant() switch
+    {
+        "brave" => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "BraveSoftware", "Brave-Browser", "User Data"),
+        "chrome" => Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Google", "Chrome", "User Data"),
+        _ => Environment.ExpandEnvironmentVariables(source)
+    };
+
+    private static IEnumerable<string> FindTampermonkeyDirectories(string source)
+    {
+        var direct = Path.GetFullPath(source);
+        if (!Directory.Exists(direct))
+        {
+            return Array.Empty<string>();
+        }
+
+        return Directory.EnumerateFiles(direct, "*.ldb", new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = true,
+                AttributesToSkip = FileAttributes.ReparsePoint
+            })
+            .Select(Path.GetDirectoryName)
+            .Where(path => path is not null)
+            .Cast<string>()
+            .Where(path => string.Equals(Path.GetFileName(path), TampermonkeyExtensionId, StringComparison.OrdinalIgnoreCase))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static int BackupTampermonkeyScripts(BackupDefinition app, BackupRoot root, string source, string backupRoot, Arguments arguments, ProgressLine spinner)
+    {
+        var directories = Directory.EnumerateFiles(source, "*.ldb", new EnumerationOptions
+            {
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = true,
+                AttributesToSkip = FileAttributes.ReparsePoint
+            })
+            .Select(Path.GetDirectoryName)
+            .Where(path => path is not null)
+            .Cast<string>()
+            .Where(path => string.Equals(Path.GetFileName(path), TampermonkeyExtensionId, StringComparison.OrdinalIgnoreCase))
+            .Where(path => app.Include.Any(pattern => GlobMatches(Path.GetRelativePath(source, path), pattern)))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        var copied = 0;
+        foreach (var directory in directories)
+        {
+            var relative = Path.GetRelativePath(source, directory);
+            var target = Path.Combine(backupRoot, app.Id, root.Name, relative);
+            copied += ExtractTampermonkeyScripts(directory, target, arguments.DryRun, overwriteExisting: true, arguments.Silent, arguments.Verbose);
+        }
+        return copied;
+    }
+
+    private static int ExtractTampermonkeyScripts(string databaseDirectory, string targetDirectory, bool dryRun, bool overwriteExisting, bool silent, bool verbose)
+    {
+        var values = Directory.EnumerateFiles(databaseDirectory, "*.ldb")
+            .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+            .SelectMany(ReadLevelDbValues)
+            .ToArray();
+        if (verbose && !silent)
+        {
+            var headers = values.Count(value => Encoding.UTF8.GetString(value).Contains("==UserScript==", StringComparison.Ordinal));
+            Console.WriteLine($"  Read {values.Length} LevelDB values ({headers} containing a userscript header)");
+        }
+        var scripts = values
+            .SelectMany(ExtractScripts)
+            .GroupBy(script => script.FileName, StringComparer.OrdinalIgnoreCase)
+            .Select(group => group.Last())
+            .ToArray();
+
+        var updated = 0;
+        foreach (var script in scripts)
+        {
+            var target = Path.Combine(targetDirectory, script.FileName);
+            if (File.Exists(target) && File.ReadAllText(target, Encoding.UTF8) == script.Source)
+            {
+                continue;
+            }
+            if (File.Exists(target) && !overwriteExisting)
+            {
+                if (!silent)
+                {
+                    Console.WriteLine($"Skipped existing script (use --force to overwrite): {target}");
+                }
+                continue;
+            }
+
+            if (!dryRun)
+            {
+                Directory.CreateDirectory(targetDirectory);
+                var temporary = target + ".tmp";
+                File.WriteAllText(temporary, script.Source, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                File.Move(temporary, target, overwrite: true);
+            }
+            updated++;
+        }
+        return updated;
+    }
+
+    private static IEnumerable<ExtractedScript> ExtractScripts(byte[] value)
+    {
+        var text = Encoding.UTF8.GetString(value);
+        if (!text.Contains("==UserScript==", StringComparison.Ordinal))
+        {
+            yield break;
+        }
+
+        JsonDocument? document = null;
+        try { document = JsonDocument.Parse(text); }
+        catch (JsonException) { }
+        if (document is not null)
+        {
+            using (document)
+            {
+                foreach (var script in ExtractScripts(document.RootElement))
+                {
+                    yield return script;
+                }
+            }
+            yield break;
+        }
+
+        yield return new ExtractedScript(CreateScriptFileName(text, null), text);
+    }
+
+    private static IEnumerable<ExtractedScript> ExtractScripts(JsonElement element)
+    {
+        if (element.ValueKind == JsonValueKind.Object)
+        {
+            var name = element.TryGetProperty("name", out var nameElement) && nameElement.ValueKind == JsonValueKind.String
+                ? nameElement.GetString() : null;
+            foreach (var property in element.EnumerateObject())
+            {
+                if ((property.NameEquals("code") || property.NameEquals("source")) && property.Value.ValueKind == JsonValueKind.String)
+                {
+                    var source = property.Value.GetString()!;
+                    if (source.Contains("==UserScript==", StringComparison.Ordinal))
+                    {
+                        yield return new ExtractedScript(CreateScriptFileName(source, name), source);
+                    }
+                }
+                foreach (var script in ExtractScripts(property.Value))
+                {
+                    yield return script;
+                }
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in element.EnumerateArray())
+            {
+                foreach (var script in ExtractScripts(item))
+                {
+                    yield return script;
+                }
+            }
+        }
+        else if (element.ValueKind == JsonValueKind.String)
+        {
+            var source = element.GetString()!;
+            if (source.Contains("==UserScript==", StringComparison.Ordinal))
+            {
+                yield return new ExtractedScript(CreateScriptFileName(source, null), source);
+            }
+        }
+    }
+
+    private static string CreateScriptFileName(string source, string? name)
+    {
+        var metadataName = Regex.Match(source, @"^\s*//\s*@name\s+(.+)$", RegexOptions.Multiline).Groups[1].Value.Trim();
+        var candidate = string.IsNullOrWhiteSpace(name) ? metadataName : name;
+        if (string.IsNullOrWhiteSpace(candidate))
+        {
+            candidate = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(source)))[..12];
+        }
+        var invalid = Path.GetInvalidFileNameChars();
+        var safe = new string(candidate.Select(character => invalid.Contains(character) ? '_' : character).ToArray()).Trim();
+        return (string.IsNullOrWhiteSpace(safe) ? "tampermonkey-script" : safe) + ".js";
+    }
+
+    private static IEnumerable<byte[]> ReadLevelDbValues(string path)
+    {
+        var file = File.ReadAllBytes(path);
+        if (file.Length < 48)
+        {
+            yield break;
+        }
+        var footer = file.AsSpan(file.Length - 48);
+        const ulong TableMagic = 0xdb4775248b80fb57;
+        if (BitConverter.ToUInt64(footer[40..]) != TableMagic)
+        {
+            yield break;
+        }
+
+        var position = 0;
+        _ = ReadBlockHandle(footer[..40], ref position);
+        var indexHandle = ReadBlockHandle(footer[..40], ref position);
+        foreach (var index in ReadLevelDbBlock(file, indexHandle))
+        {
+            var handlePosition = 0;
+            var dataHandle = ReadBlockHandle(index.Value, ref handlePosition);
+            foreach (var entry in ReadLevelDbBlock(file, dataHandle))
+            {
+                yield return entry.Value;
+            }
+        }
+    }
+
+    private static BlockHandle ReadBlockHandle(ReadOnlySpan<byte> data, ref int position) =>
+        new(ReadVarint(data, ref position), ReadVarint(data, ref position));
+
+    private static IEnumerable<LevelDbEntry> ReadLevelDbBlock(byte[] file, BlockHandle handle)
+    {
+        if (handle.Offset > int.MaxValue || handle.Size > int.MaxValue || handle.Offset + handle.Size + 5 > (ulong)file.Length)
+        {
+            throw new InvalidDataException("LevelDB block points outside its table file.");
+        }
+        var offset = (int)handle.Offset;
+        var size = (int)handle.Size;
+        var data = file.AsSpan(offset, size).ToArray();
+        var compression = file[offset + size];
+        data = compression switch
+        {
+            0 => data,
+            1 => DecompressSnappy(data),
+            _ => throw new InvalidDataException($"Unsupported LevelDB compression type {compression}.")
+        };
+
+        if (data.Length < 4) yield break;
+        var restartCount = BitConverter.ToInt32(data, data.Length - 4);
+        var restartOffset = data.Length - 4 - (restartCount * sizeof(int));
+        if (restartCount < 0 || restartOffset < 0) throw new InvalidDataException("Invalid LevelDB block restart table.");
+        var position = 0;
+        var previousKey = Array.Empty<byte>();
+        while (position < restartOffset)
+        {
+            var shared = checked((int)ReadVarint(data, ref position));
+            var unshared = checked((int)ReadVarint(data, ref position));
+            var valueLength = checked((int)ReadVarint(data, ref position));
+            if (shared > previousKey.Length || position + unshared + valueLength > restartOffset) throw new InvalidDataException("Invalid LevelDB entry.");
+            var key = previousKey[..shared].Concat(data.AsSpan(position, unshared).ToArray()).ToArray();
+            position += unshared;
+            var value = data.AsSpan(position, valueLength).ToArray();
+            position += valueLength;
+            previousKey = key;
+            yield return new LevelDbEntry(key, value);
+        }
+    }
+
+    private static ulong ReadVarint(ReadOnlySpan<byte> data, ref int position)
+    {
+        ulong result = 0;
+        for (var shift = 0; shift < 64 && position < data.Length; shift += 7)
+        {
+            var value = data[position++];
+            result |= (ulong)(value & 0x7f) << shift;
+            if ((value & 0x80) == 0) return result;
+        }
+        throw new InvalidDataException("Invalid LevelDB varint.");
+    }
+
+    private static byte[] DecompressSnappy(ReadOnlySpan<byte> compressed)
+    {
+        var position = 0;
+        var length = checked((int)ReadVarint(compressed, ref position));
+        var output = new byte[length];
+        var outputPosition = 0;
+        while (position < compressed.Length)
+        {
+            var tag = compressed[position++];
+            switch (tag & 0x03)
+            {
+                case 0:
+                    var literalLength = tag >> 2;
+                    if (literalLength >= 60)
+                    {
+                        var byteCount = literalLength - 59;
+                        literalLength = 0;
+                        for (var index = 0; index < byteCount; index++) literalLength |= compressed[position++] << (index * 8);
+                    }
+                    literalLength++;
+                    compressed.Slice(position, literalLength).CopyTo(output.AsSpan(outputPosition));
+                    position += literalLength;
+                    outputPosition += literalLength;
+                    break;
+                case 1:
+                    CopySnappy(output, ref outputPosition, 4 + ((tag >> 2) & 7), ((tag & 0xe0) << 3) | compressed[position++]);
+                    break;
+                case 2:
+                    CopySnappy(output, ref outputPosition, 1 + (tag >> 2), compressed[position] | (compressed[position + 1] << 8));
+                    position += 2;
+                    break;
+                case 3:
+                    CopySnappy(output, ref outputPosition, 1 + (tag >> 2), BitConverter.ToInt32(compressed.Slice(position, 4)));
+                    position += 4;
+                    break;
+            }
+        }
+        if (outputPosition != output.Length) throw new InvalidDataException("Invalid Snappy output length.");
+        return output;
+    }
+
+    private static void CopySnappy(byte[] output, ref int destination, int length, int offset)
+    {
+        if (offset <= 0 || offset > destination || destination + length > output.Length) throw new InvalidDataException("Invalid Snappy copy offset.");
+        for (var index = 0; index < length; index++) output[destination + index] = output[destination - offset + index];
+        destination += length;
+    }
+
+    private sealed record ExtractedScript(string FileName, string Source);
+    private sealed record BlockHandle(ulong Offset, ulong Size);
+    private sealed record LevelDbEntry(byte[] Key, byte[] Value);
 
     private static int Restore(Arguments arguments)
     {
@@ -703,6 +1072,7 @@ internal static class Program
         var lines = File.ReadAllLines(path);
         var id = lines.Select(line => Regex.Match(line, @"^\s*id\s*:\s*(.+)$")).FirstOrDefault(m => m.Success)?.Groups[1].Value.Trim();
         var name = lines.Select(line => Regex.Match(line, @"^\s*name\s*:\s*(.+)$")).FirstOrDefault(m => m.Success)?.Groups[1].Value.Trim();
+        var tool = lines.Select(line => Regex.Match(line, @"^\s*tool\s*:\s*(.+)$")).FirstOrDefault(m => m.Success)?.Groups[1].Value.Trim();
         var roots = new List<BackupRoot>();
         string? rootName = null;
         var paths = new List<string>();
@@ -795,7 +1165,7 @@ internal static class Program
         }
         FlushRoot();
 
-        return new BackupDefinition(Unquote(id ?? Path.GetFileNameWithoutExtension(path)), Unquote(name ?? id ?? "Application"), roots,
+        return new BackupDefinition(Unquote(id ?? Path.GetFileNameWithoutExtension(path)), Unquote(name ?? id ?? "Application"), Unquote(tool ?? ""), roots,
             ReadPatterns(lines, "include"), ReadPatterns(lines, "exclude"));
     }
 
@@ -839,7 +1209,7 @@ internal static class Program
         return Regex.IsMatch(value.Replace('\\', '/'), regex, RegexOptions.IgnoreCase);
     }
 
-    private sealed record BackupDefinition(string Id, string Name, IReadOnlyList<BackupRoot> Roots, IReadOnlyList<string> Include, IReadOnlyList<string> Exclude);
+    private sealed record BackupDefinition(string Id, string Name, string Tool, IReadOnlyList<BackupRoot> Roots, IReadOnlyList<string> Include, IReadOnlyList<string> Exclude);
     private sealed record BackupRoot(string Name, IReadOnlyList<string> Paths, EvidenceGroup? Evidence);
     private sealed record EvidenceGroup(string Operator, List<EvidencePredicate> Predicates);
     private sealed record EvidencePredicate(string Kind, string? Path, string? Text);

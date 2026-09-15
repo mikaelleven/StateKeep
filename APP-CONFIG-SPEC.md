@@ -48,6 +48,11 @@ Recommended constraints:
 
 Human-readable application title.
 
+### `tool`
+
+Optional specialized backup tool. `tmextract` extracts Tampermonkey user scripts
+from matching LevelDB directories instead of copying the database files directly.
+
 ### `roots`
 
 One or more root definitions. Each root represents a different application folder. Roots are evaluated independently; the same filesystem path may be used by more than one root.
