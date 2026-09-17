@@ -119,8 +119,9 @@ def main() -> int:
 
     if args.local:
         install_dir = Path.home() / "AppData" / "Local" / "StateKeep"
-        shutil.rmtree(install_dir, ignore_errors=True)
-        shutil.copytree(publish_dir, install_dir)
+        # Keep the destination directory so rerunning the installer does not fail
+        # if an existing executable is in use or removal is otherwise blocked.
+        shutil.copytree(publish_dir, install_dir, dirs_exist_ok=True)
         add_to_user_path(install_dir)
         print(f"Installed locally: {install_dir}")
 
