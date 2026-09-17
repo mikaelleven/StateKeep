@@ -70,6 +70,15 @@ statekeep apps list
 statekeep apps open
 ```
 
+### Open the first detected root for an application
+
+```powershell
+statekeep open vscode
+```
+
+Roots and their path alternatives are evaluated in YAML order. Explorer opens
+at the first matching root.
+
 ### Show current status/configuration
 
 ```powershell

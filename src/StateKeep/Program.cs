@@ -83,6 +83,11 @@ internal static class Program
             return Apps(arguments);
         }
 
+        if (string.Equals(arguments.Command, "open", StringComparison.OrdinalIgnoreCase))
+        {
+            return OpenApplication(arguments);
+        }
+
         WarnIfBackupPathIsNotConfigured();
 
         if (!arguments.Silent)
@@ -101,6 +106,7 @@ internal static class Program
         "apps",
         "status",
         "validate",
+        "open",
         "install",
         "setup"
     };
@@ -143,6 +149,7 @@ internal static class Program
         Console.WriteLine("  restore --all      Restore all applications");
         Console.WriteLine("  apps list          List known applications");
         Console.WriteLine("  apps open          Open the installed apps folder");
+        Console.WriteLine("  open <app>         Open the first detected application root");
         Console.WriteLine("  status             Show current status and configuration");
         Console.WriteLine("  validate           Validate configuration");
         Console.WriteLine("  setup [path]       Configure the backup path");
@@ -1378,6 +1385,67 @@ internal static class Program
             cancellation.Dispose();
             refreshCancellation = null;
             refreshThread = null;
+        }
+    }
+
+    private static int OpenApplication(Arguments arguments)
+    {
+        var requestedApp = arguments.Positionals.Skip(1).FirstOrDefault();
+        if (string.IsNullOrWhiteSpace(requestedApp))
+        {
+            WriteError("An application is required. Usage: statekeep open <app>");
+            return UsageError;
+        }
+
+        var appsDirectory = Path.Combine(AppContext.BaseDirectory, "apps");
+        if (!Directory.Exists(appsDirectory))
+        {
+            WriteError($"Application definition directory was not found: {appsDirectory}");
+            return UsageError;
+        }
+
+        var application = Directory.EnumerateFiles(appsDirectory, "*.yaml")
+            .Concat(Directory.EnumerateFiles(appsDirectory, "*.yml"))
+            .Select(ReadBackupDefinition)
+            .FirstOrDefault(app => string.Equals(app.Id, requestedApp, StringComparison.OrdinalIgnoreCase));
+        if (application is null)
+        {
+            WriteError($"No application definition found for '{requestedApp}'. Use 'statekeep apps list' to see available applications.");
+            return UsageError;
+        }
+
+        string? matchingPath = null;
+        foreach (var root in application.Roots)
+        {
+            matchingPath = root.Paths
+                .Select(Environment.ExpandEnvironmentVariables)
+                .FirstOrDefault(path => Directory.Exists(path) && EvidenceMatches(path, root.Evidence));
+            if (matchingPath is not null)
+            {
+                break;
+            }
+        }
+
+        if (matchingPath is null)
+        {
+            Console.WriteLine($"Warning: no root folder for {application.Name} was found on this machine.");
+            return Success;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = "explorer.exe",
+                UseShellExecute = true,
+                Arguments = $"\"{matchingPath}\""
+            });
+            return Success;
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or Win32Exception)
+        {
+            WriteError($"Could not open the {application.Name} folder: {exception.Message}");
+            return UsageError;
         }
     }
 
