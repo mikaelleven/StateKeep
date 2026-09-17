@@ -16,7 +16,7 @@ It is **not** intended to replace a full-system backup product.
 2. Keep application-specific knowledge in human-readable configuration files.
 3. Store backups in a per-device folder while preserving each application's relative path structure.
 4. Make backups understandable and recoverable without proprietary archives or databases.
-5. Favor stability, resilience, robustness, KISS and YAGNI over features or visual design.
+5. Favor stability, resilience, and robustness, following KISS and YAGNI over adding features or visual design.
 
 ## Example
 

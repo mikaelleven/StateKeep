@@ -2,16 +2,16 @@
 
 ## Purpose
 
-Windows command-line tool for backing up and restoring application settings to a cloud-synchronized folder..
+Windows command-line tool for backing up and restoring application settings to a cloud-synchronized folder.
 
 ## Development targets
 
-- Platform(s): windows
+- Platform: Windows
 - Primary technology: .NET
-- Primary language: csharp
+- Primary language: C#
 - Language/toolchain version: 10.0.302
 - Secondary/support technology: Python
-- Secondary language: python
+- Secondary language: Python
 - Blueprint: csharp
 
 ## Local development setup
@@ -48,4 +48,4 @@ The project is currently configured as a class library and does not yet contain 
 
 ## Architecture
 
-See `docs/ARCHITECTURE.md` for architectural rationale and constraints.
+See `ARCHITECTURE.md` for architectural rationale and constraints.
