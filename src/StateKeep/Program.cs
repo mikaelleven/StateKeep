@@ -88,6 +88,16 @@ internal static class Program
             return OpenApplication(arguments);
         }
 
+        if (string.Equals(arguments.Command, "install", StringComparison.OrdinalIgnoreCase))
+        {
+            return InstallTask(arguments);
+        }
+
+        if (string.Equals(arguments.Command, "uninstall", StringComparison.OrdinalIgnoreCase))
+        {
+            return UninstallTask(arguments);
+        }
+
         WarnIfBackupPathIsNotConfigured();
 
         if (!arguments.Silent)
@@ -108,6 +118,7 @@ internal static class Program
         "validate",
         "open",
         "install",
+        "uninstall",
         "setup"
     };
 
@@ -124,11 +135,14 @@ internal static class Program
 
     private static void WriteHelp(string? command = null, bool includeConfigurationWarning = false)
     {
-        if (string.Equals(command, "install", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(command, "install", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(command, "uninstall", StringComparison.OrdinalIgnoreCase))
         {
-            Console.WriteLine("Usage: statekeep install task");
+            Console.WriteLine($"Usage: statekeep {command} task [--interval <minutes|hours>]");
             Console.WriteLine();
-            Console.WriteLine("Install or update the scheduled backup task.");
+            Console.WriteLine(string.Equals(command, "install", StringComparison.OrdinalIgnoreCase)
+                ? "Install or update the scheduled backup task."
+                : "Remove the scheduled backup task.");
             return;
         }
 
@@ -222,6 +236,119 @@ internal static class Program
             ? path.Trim()
             : Path.GetFullPath(expandedPath);
     }
+
+    private const string ScheduledTaskName = "StateKeep Automatic Backup";
+
+    private static int InstallTask(Arguments arguments)
+    {
+        if (!HasTaskSubcommand(arguments))
+        {
+            WriteError("Usage: statekeep install task [--interval <minutes|hours>]");
+            return UsageError;
+        }
+
+        if (!TryGetIntervalMinutes(arguments, out var minutes))
+        {
+            return UsageError;
+        }
+
+        var executable = Process.GetCurrentProcess().MainModule?.FileName;
+        var expectedDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "StateKeep");
+        if (executable is null || !PathsEqual(Path.GetDirectoryName(executable), expectedDirectory))
+        {
+            Console.Error.WriteLine("Warning: Scheduled tasks require the installed StateKeep executable.");
+            Console.Error.WriteLine($"Install StateKeep to {expectedDirectory} first, for example:");
+            Console.Error.WriteLine("  irm https://raw.githubusercontent.com/mikaelleven/StateKeep/main/scripts/install.ps1 | iex");
+            return UsageError;
+        }
+
+        if (Validate() != Success)
+        {
+            return UsageError;
+        }
+
+        var command = $"schtasks.exe /Create /TN \"{ScheduledTaskName}\" /TR \"{executable} backup --silent\" /SC MINUTE /MO {minutes} /F";
+        var commandArguments = new[] { "/Create", "/TN", ScheduledTaskName, "/TR", $"\"{executable}\" backup --silent", "/SC", "MINUTE", "/MO", minutes.ToString(), "/F" };
+        Console.WriteLine($"Task name: {ScheduledTaskName}");
+        Console.WriteLine($"Interval: every {FormatInterval(minutes)}");
+        Console.WriteLine($"Action: {executable} backup --silent");
+        Console.WriteLine($"Command: {command}");
+        if (arguments.DryRun)
+        {
+            Console.WriteLine("Dry run: no changes made.");
+            return Success;
+        }
+
+        return RunScheduledTasks(commandArguments, "Scheduled backup task installed or updated.");
+    }
+
+    private static int UninstallTask(Arguments arguments)
+    {
+        if (!HasTaskSubcommand(arguments))
+        {
+            WriteError("Usage: statekeep uninstall task [--dryrun]");
+            return UsageError;
+        }
+
+        var command = $"schtasks.exe /Delete /TN \"{ScheduledTaskName}\" /F";
+        var commandArguments = new[] { "/Delete", "/TN", ScheduledTaskName, "/F" };
+        Console.WriteLine($"Task name: {ScheduledTaskName}");
+        Console.WriteLine($"Command: {command}");
+        if (arguments.DryRun)
+        {
+            Console.WriteLine("Dry run: no changes made.");
+            return Success;
+        }
+
+        return RunScheduledTasks(commandArguments, "Scheduled backup task removed.");
+    }
+
+    private static bool HasTaskSubcommand(Arguments arguments) =>
+        arguments.Positionals.Count > 1 && string.Equals(arguments.Positionals[1], "task", StringComparison.OrdinalIgnoreCase);
+
+    private static bool TryGetIntervalMinutes(Arguments arguments, out int minutes)
+    {
+        minutes = 60;
+        var value = arguments.GetValue("--interval");
+        if (value is null) return true;
+        var match = Regex.Match(value, "^(?<number>[1-9][0-9]*)(?<unit>m|h)?$", RegexOptions.IgnoreCase);
+        if (!match.Success || !int.TryParse(match.Groups["number"].Value, out var number))
+        {
+            WriteError("Interval must be a positive number of minutes, or a number followed by m or h.");
+            return false;
+        }
+        minutes = match.Groups["unit"].Value.Equals("h", StringComparison.OrdinalIgnoreCase) ? number * 60 : number;
+        if (minutes > 1439)
+        {
+            WriteError("Interval must not exceed 1439 minutes.");
+            return false;
+        }
+        return true;
+    }
+
+    private static string FormatInterval(int minutes) => minutes % 60 == 0 ? $"{minutes / 60} hour(s)" : $"{minutes} minute(s)";
+
+    private static int RunScheduledTasks(IEnumerable<string> commandArguments, string successMessage)
+    {
+        var startInfo = new ProcessStartInfo("schtasks.exe") { UseShellExecute = false, RedirectStandardOutput = true, RedirectStandardError = true, CreateNoWindow = true };
+        foreach (var argument in commandArguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(startInfo);
+        if (process is null) { WriteError("Could not start schtasks.exe."); return UsageError; }
+        var output = process.StandardOutput.ReadToEnd();
+        var error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+        if (process.ExitCode != 0) { if (error.Length > 0) Console.Error.WriteLine(error.Trim()); return process.ExitCode; }
+        if (output.Length > 0) Console.WriteLine(output.Trim());
+        Console.WriteLine(successMessage);
+        return Success;
+    }
+
+    private static bool PathsEqual(string? left, string right) =>
+        left is not null && string.Equals(Path.GetFullPath(left).TrimEnd(Path.DirectorySeparatorChar), Path.GetFullPath(right).TrimEnd(Path.DirectorySeparatorChar), StringComparison.OrdinalIgnoreCase);
 
     private static string GetStateDirectory() => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -1840,7 +1967,7 @@ internal static class Program
 
         public bool Has(params string[] options) => values.Any(value => options.Contains(value, StringComparer.OrdinalIgnoreCase));
 
-        private string? GetValue(string option)
+        public string? GetValue(string option)
         {
             var index = Array.FindIndex(values, value => string.Equals(value, option, StringComparison.OrdinalIgnoreCase));
             if (index < 0 || index == values.Length - 1 || values[index + 1].StartsWith('-'))
