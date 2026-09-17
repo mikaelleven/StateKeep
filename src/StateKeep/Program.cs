@@ -1003,6 +1003,7 @@ internal static class Program
         }
 
         var failures = 0;
+        var skippedConflicts = 0;
         var restored = 0;
         foreach (var app in applications)
         {
@@ -1042,24 +1043,25 @@ internal static class Program
 
                         backupFilesFound++;
                         var target = Path.Combine(destination, relative);
-                        if (File.Exists(target) && FilesAreIdentical(file, target))
+                        var targetExists = File.Exists(target);
+                        var identical = targetExists && FilesAreIdentical(file, target);
+                        if (identical)
                         {
+                            WriteRestoreEntry(relative, file, target, '=', arguments);
                             continue;
                         }
 
-                        if (File.Exists(target) && !arguments.Force)
+                        if (targetExists && !arguments.Force)
                         {
-                            WriteRestoreConflict(relative, file, target, arguments.Silent);
+                            WriteRestoreEntry(relative, file, target, '!', arguments);
+                            skippedConflicts++;
                             failures++;
                             continue;
                         }
 
                         if (arguments.DryRun)
                         {
-                            if (!arguments.Silent)
-                            {
-                                Console.WriteLine($"Would restore {app.Name}: {relative}");
-                            }
+                            WriteRestoreEntry(relative, file, target, targetExists ? '!' : '+', arguments);
                             appRestored++;
                             continue;
                         }
@@ -1069,14 +1071,12 @@ internal static class Program
                         {
                             var safetyCopy = GetBackupFilePath(target);
                             File.Copy(target, safetyCopy, false);
-                            if (!arguments.Silent)
-                            {
-                                Console.WriteLine($"Backed up existing file: {safetyCopy}");
-                            }
+
                         }
 
                         File.Copy(file, target, true);
                         File.SetLastWriteTimeUtc(target, File.GetLastWriteTimeUtc(file));
+                        WriteRestoreEntry(relative, file, target, targetExists ? '!' : '+', arguments);
                         appRestored++;
                     }
                 }
@@ -1105,6 +1105,10 @@ internal static class Program
             Console.WriteLine(arguments.DryRun
                 ? $"Completed: {restored} files would be restored."
                 : $"Completed: {restored} files restored.");
+            if (skippedConflicts > 0)
+            {
+                WriteWarning($"{skippedConflicts} files skipped. Use --force to overwrite (creates backup files).");
+            }
         }
         return failures == 0 ? Success : 1;
     }
@@ -1203,24 +1207,44 @@ internal static class Program
             : candidate;
     }
 
-    private static void WriteRestoreConflict(string relative, string source, string target, bool silent)
+    private static void WriteRestoreEntry(string relative, string source, string target, char action, Arguments arguments)
     {
-        if (silent)
+        if (arguments.Silent || (action != '!' && !arguments.Verbose))
         {
             return;
         }
 
-        static string Metadata(string path)
-        {
-            var info = new FileInfo(path);
-            using var stream = File.OpenRead(path);
-            return $"Size: {info.Length:N0} bytes, Modified: {info.LastWriteTime:yyyy-MM-dd HH:mm:ss}, SHA-256: {Convert.ToHexString(SHA256.HashData(stream))}";
-        }
+        var sourceInfo = new FileInfo(source);
+        var targetInfo = new FileInfo(target);
+        var sourceDate = sourceInfo.LastWriteTime;
+        var targetExists = targetInfo.Exists;
+        var targetDate = targetExists ? targetInfo.LastWriteTime : sourceDate;
+        var previousColor = Console.ForegroundColor;
 
-        Console.WriteLine($"Conflict: {relative}");
-        Console.WriteLine($"  Source:      {Metadata(source)}");
-        Console.WriteLine($"  Destination: {Metadata(target)}");
-        Console.WriteLine("Skipped. Use --force to overwrite after creating a .bak file.");
+        if (action == '=')
+        {
+            Console.ForegroundColor = ConsoleColor.DarkGray;
+        }
+        Console.WriteLine(relative);
+        SetRestoreActionColor(action);
+        Console.Write($"{action}: {sourceInfo.Length:N0} bytes {sourceDate:yyyy-MM-dd HH:mm:ss} >> ");
+        if (targetExists && targetDate > sourceDate)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+        }
+        Console.WriteLine($"{targetInfo.Length:N0} bytes {targetDate:yyyy-MM-dd HH:mm:ss}");
+        Console.ForegroundColor = previousColor;
+    }
+
+    private static void SetRestoreActionColor(char action)
+    {
+        Console.ForegroundColor = action switch
+        {
+            '!' => ConsoleColor.DarkYellow,
+            '+' => ConsoleColor.Green,
+            '=' => ConsoleColor.DarkGray,
+            _ => Console.ForegroundColor
+        };
     }
 
     private static void RemoveObsoleteBackupFiles(string destination, ISet<string> selectedRelativePaths)
@@ -1976,6 +2000,13 @@ internal static class Program
 
         Console.WriteLine($"{yellow}Warning: No valid app configuration with a backup path was found.{reset}");
         Console.WriteLine($"{yellow}Run \"statekeep setup\" to configure StateKeep before using backup or restore commands.{reset}");
+    }
+
+    private static void WriteWarning(string message)
+    {
+        const string yellow = "\u001b[33m";
+        const string reset = "\u001b[0m";
+        Console.WriteLine($"{yellow}Warning: {message}{reset}");
     }
 
     private static void WriteError(string message)
