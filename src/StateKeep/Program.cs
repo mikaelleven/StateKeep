@@ -269,9 +269,13 @@ internal static class Program
             return UsageError;
         }
 
-        var powershell = Path.Combine(Environment.SystemDirectory, "WindowsPowerShell", "v1.0", "powershell.exe");
-        var script = $"& '{executable.Replace("'", "''")}' backup --silent";
-        var taskAction = $"\"{powershell}\" -NoProfile -NonInteractive -WindowStyle Hidden -Command \"{script}\"";
+        var wscript = Path.Combine(Environment.SystemDirectory, "wscript.exe");
+        var launcher = Path.Combine(GetStateDirectory(), "scheduled-backup.vbs");
+        var escapedExecutable = executable.Replace("\"", "\"\"");
+        var launcherContents = $"Dim shell{Environment.NewLine}Set shell = CreateObject(\"WScript.Shell\"){Environment.NewLine}WScript.Quit shell.Run(\"\"\"{escapedExecutable}\"\" backup --silent\", 0, True){Environment.NewLine}";
+        Directory.CreateDirectory(GetStateDirectory());
+        File.WriteAllText(launcher, launcherContents, Encoding.ASCII);
+        var taskAction = $"\"{wscript}\" //B //NoLogo \"{launcher}\"";
         var command = $"schtasks.exe /Create /TN \"{ScheduledTaskName}\" /TR \"{taskAction}\" /SC MINUTE /MO {minutes} /F";
         var commandArguments = new[] { "/Create", "/TN", ScheduledTaskName, "/TR", taskAction, "/SC", "MINUTE", "/MO", minutes.ToString(), "/F" };
         Console.WriteLine($"Task name: {ScheduledTaskName}");

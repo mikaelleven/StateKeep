@@ -24,13 +24,13 @@ Repeated execution shall:
 
 ## 3. Scheduled action
 
-The scheduled action launches Windows PowerShell with its window hidden, and PowerShell invokes StateKeep silently:
+The scheduled action uses the GUI-subsystem `wscript.exe` host to run a generated VBScript launcher with no window. The launcher invokes StateKeep synchronously with `backup --silent` and returns its exit code:
 
-```powershell
-powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command "& 'C:\\Users\\...\\StateKeep\\statekeep.exe' backup --silent"
+```text
+wscript.exe //B //NoLogo "%LOCALAPPDATA%\\StateKeep\\scheduled-backup.vbs"
 ```
 
-This keeps the installed executable as a normal console application for interactive CLI use while ensuring automatic backups do not display a terminal window. The configured executable path should be absolute when registered with Task Scheduler.
+This keeps the installed executable as a normal console application for interactive CLI use while ensuring automatic backups do not display a terminal window. The launcher is regenerated when the task is installed or updated, and the configured executable path is absolute inside the launcher.
 
 ## 4. Task identity
 
