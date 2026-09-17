@@ -16,6 +16,8 @@ internal static class Program
 
     public static int Main(string[] args)
     {
+        Log.Info("Application started");
+
         if (args.Length == 0)
         {
             WriteHelp(includeConfigurationWarning: true);
@@ -450,6 +452,9 @@ internal static class Program
         var scanned = 0;
         var successful = 0;
         var copied = 0;
+        var appsUpdated = 0;
+        var attemptType = arguments.Silent ? "scheduled" : "manual";
+        Log.Info($"Backup started ({attemptType})");
 
         foreach (var app in applications)
         {
@@ -538,11 +543,17 @@ internal static class Program
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
                 {
                     failed = true;
+                    Log.Error($"Backup failed for {app.Name} ({root.Name}): {exception.Message}");
                     spinner.Complete(false, exception.Message);
                 }
             }
 
             copied += appCopied;
+            if (appCopied > 0)
+            {
+                appsUpdated++;
+            }
+
             if (!arguments.Silent)
             {
                 Console.WriteLine($"{(failed ? "✗" : "✓")} {app.Name}: {appCopied} changed files");
@@ -554,7 +565,28 @@ internal static class Program
         {
             Console.WriteLine($"Completed: {scanned} apps scanned, {successful} successful, {(arguments.DryRun ? $"{copied} files would have been copied" : $"{copied} files copied")}.");
         }
-        return successful == scanned ? Success : 1;
+        var result = successful == scanned ? Success : 1;
+        if (!arguments.DryRun)
+        {
+            var attempt = new BackupAttempt(
+                DateTimeOffset.UtcNow,
+                result == Success ? "success" : "fail",
+                appsUpdated,
+                attemptType);
+            try
+            {
+                BackupStateFile.Write(backupRoot, attempt);
+            }
+            catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+            {
+                Log.Error($"Could not write backup state: {exception.Message}");
+                WriteError($"Could not write backup state: {exception.Message}");
+                return 1;
+            }
+        }
+
+        Log.Info($"Backup completed with status {(result == Success ? "success" : "fail")}; {appsUpdated} apps updated");
+        return result;
     }
 
     private const string TampermonkeyExtensionId = "dhdgffkkebhmkfjojejmpbldmpobfkfo";
@@ -1939,7 +1971,11 @@ internal static class Program
         Console.WriteLine($"{yellow}Run \"statekeep setup\" to configure StateKeep before using backup or restore commands.{reset}");
     }
 
-    private static void WriteError(string message) => Console.Error.WriteLine($"Error: {message}");
+    private static void WriteError(string message)
+    {
+        Log.Error(message);
+        Console.Error.WriteLine($"Error: {message}");
+    }
 
     private sealed class Arguments
     {
