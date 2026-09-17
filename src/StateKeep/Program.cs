@@ -145,8 +145,8 @@ internal static class Program
         Console.WriteLine("Commands:");
         Console.WriteLine("  backup [app]       Back up all applications or one application");
         Console.WriteLine("  tmextract [profile|chrome|brave] [target]  Extract Tampermonkey scripts");
-        Console.WriteLine("  restore [app]      Restore one application");
-        Console.WriteLine("  restore --all      Restore all applications");
+        Console.WriteLine("  restore <app> [--from <device>]  Restore one application");
+        Console.WriteLine("  restore --all [--from <device>]  Restore all applications");
         Console.WriteLine("  apps list          List known applications");
         Console.WriteLine("  apps open          Open the installed apps folder");
         Console.WriteLine("  open <app>         Open the first detected application root");
@@ -162,7 +162,12 @@ internal static class Program
         Console.WriteLine("      --verbose      Write copied files to stdout");
         Console.WriteLine("      --dryrun       Check files without copying");
         Console.WriteLine("      --force        Overwrite conflicting files after backing them up");
-        Console.WriteLine("      --from <id>    Restore from a device ID, computer name, or device folder");
+        Console.WriteLine("      --from <device> Restore from another device ID, computer name, or folder");
+        Console.WriteLine();
+        Console.WriteLine("Examples:");
+        Console.WriteLine("  statekeep restore zed");
+        Console.WriteLine("  statekeep restore zed --from MYCOMPUTER");
+        Console.WriteLine("  statekeep restore --all --from MYCOMPUTER");
     }
 
     private static int Setup(string? requestedPath)
@@ -829,6 +834,7 @@ internal static class Program
             try
             {
                 var appRestored = 0;
+                var backupFilesFound = 0;
                 foreach (var root in app.Roots)
                 {
                     var source = app.Roots.Count == 1
@@ -859,6 +865,7 @@ internal static class Program
                             continue;
                         }
 
+                        backupFilesFound++;
                         var target = Path.Combine(destination, relative);
                         if (File.Exists(target) && FilesAreIdentical(file, target))
                         {
@@ -902,6 +909,12 @@ internal static class Program
                 restored += appRestored;
                 if (!arguments.Silent)
                 {
+                    if (backupFilesFound == 0)
+                    {
+                        var deviceDescription = arguments.From is null ? "this device" : $"device '{arguments.From}'";
+                        Console.WriteLine($"Warning: No backup files were found for {app.Name} on {deviceDescription}.");
+                    }
+
                     Console.WriteLine($"{app.Name}: {(arguments.DryRun ? appRestored + " files would be restored" : appRestored + " files restored")}");
                 }
             }

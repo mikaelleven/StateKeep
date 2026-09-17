@@ -26,6 +26,41 @@ statekeep restore vscode
 statekeep install task
 ```
 
+## Restore
+
+Restore one application from this computer's backup folder:
+
+```powershell
+statekeep restore zed
+```
+
+To restore from another computer or device, provide its device ID, computer
+name, or full backup folder name with `--from`:
+
+```powershell
+statekeep restore zed --from MYCOMPUTER
+statekeep restore zed --from OTHER-PC_A7K3M9Q2
+```
+
+Restore all configured applications with `--all`. The optional `--from` form
+also works when restoring all applications:
+
+```powershell
+statekeep restore --all
+statekeep restore --all --from MYCOMPUTER
+```
+
+Use an application ID instead of `--all`, but not both. Add `--dryrun` to
+preview the files that would be restored without changing the destination:
+
+```powershell
+statekeep restore zed --dryrun
+statekeep restore --all --from MYCOMPUTER --dryrun
+```
+
+If no matching backup files exist for the selected application on the chosen
+computer/device, StateKeep displays a warning and reports zero files restored.
+
 Default application definitions are bundled with StateKeep under:
 
 ```text
