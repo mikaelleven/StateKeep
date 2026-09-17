@@ -1,8 +1,8 @@
 # StateKeep
 
-[![License](https://img.shields.io/github/license/mikaelleven/StateKeep)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 [![Status: beta](https://img.shields.io/badge/status-beta-blue)](https://github.com/mikaelleven/StateKeep/releases)
-[![Downloads](https://img.shields.io/github/downloads/mikaelleven/StateKeep/total?label=downloads)](https://github.com/mikaelleven/StateKeep/releases)
+[![Downloads](https://img.shields.io/github/downloads/mikaelleven/StateKeep/total?label=downloads&color=yellow)](https://github.com/mikaelleven/StateKeep/releases)
 
 StateKeep is a Windows command-line tool that automatically backs up and restores application settings. Point it at **any folder**—ideally a cloud-synchronized drive such as OneDrive or a NAS share—and StateKeep keeps a readable copy of your supported app configurations there.
 
