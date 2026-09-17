@@ -1042,18 +1042,22 @@ internal static class Program
                         }
 
                         backupFilesFound++;
+                        var sourceInfo = new FileInfo(file);
+                        var sourceLength = sourceInfo.Length;
+                        var sourceDate = sourceInfo.LastWriteTime;
+                        var sourceDateUtc = sourceInfo.LastWriteTimeUtc;
                         var target = Path.Combine(destination, relative);
                         var targetExists = File.Exists(target);
                         var identical = targetExists && FilesAreIdentical(file, target);
                         if (identical)
                         {
-                            WriteRestoreEntry(relative, file, target, '=', arguments);
+                            WriteRestoreEntry(relative, file, target, '=', arguments, sourceLength, sourceDate);
                             continue;
                         }
 
                         if (targetExists && !arguments.Force)
                         {
-                            WriteRestoreEntry(relative, file, target, '!', arguments);
+                            WriteRestoreEntry(relative, file, target, '!', arguments, sourceLength, sourceDate);
                             skippedConflicts++;
                             failures++;
                             continue;
@@ -1061,7 +1065,7 @@ internal static class Program
 
                         if (arguments.DryRun)
                         {
-                            WriteRestoreEntry(relative, file, target, targetExists ? '!' : '+', arguments);
+                            WriteRestoreEntry(relative, file, target, targetExists ? '!' : '+', arguments, sourceLength, sourceDate);
                             appRestored++;
                             continue;
                         }
@@ -1075,8 +1079,8 @@ internal static class Program
                         }
 
                         File.Copy(file, target, true);
-                        File.SetLastWriteTimeUtc(target, File.GetLastWriteTimeUtc(file));
-                        WriteRestoreEntry(relative, file, target, targetExists ? '!' : '+', arguments);
+                        File.SetLastWriteTimeUtc(target, sourceDateUtc);
+                        WriteRestoreEntry(relative, file, target, targetExists ? '!' : '+', arguments, sourceLength, sourceDate);
                         appRestored++;
                     }
                 }
@@ -1091,6 +1095,7 @@ internal static class Program
                     }
 
                     Console.WriteLine($"{app.Name}: {(arguments.DryRun ? appRestored + " files would be restored" : appRestored + " files restored")}");
+                    Console.WriteLine();
                 }
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -1105,6 +1110,7 @@ internal static class Program
             Console.WriteLine(arguments.DryRun
                 ? $"Completed: {restored} files would be restored."
                 : $"Completed: {restored} files restored.");
+            Console.WriteLine();
             if (skippedConflicts > 0)
             {
                 WriteWarning($"{skippedConflicts} files skipped. Use --force to overwrite (creates backup files).");
@@ -1207,17 +1213,16 @@ internal static class Program
             : candidate;
     }
 
-    private static void WriteRestoreEntry(string relative, string source, string target, char action, Arguments arguments)
+    private static void WriteRestoreEntry(string relative, string source, string target, char action, Arguments arguments, long sourceLength, DateTime sourceDate)
     {
-        if (arguments.Silent || (action != '!' && !arguments.Verbose))
+        if (arguments.Silent)
         {
             return;
         }
 
-        var sourceInfo = new FileInfo(source);
         var targetInfo = new FileInfo(target);
-        var sourceDate = sourceInfo.LastWriteTime;
         var targetExists = targetInfo.Exists;
+        var targetLength = targetExists ? targetInfo.Length : 0;
         var targetDate = targetExists ? targetInfo.LastWriteTime : sourceDate;
         var previousColor = Console.ForegroundColor;
 
@@ -1233,12 +1238,13 @@ internal static class Program
         Console.Write("\u001b[22m");
 
         Console.ForegroundColor = ConsoleColor.Gray;
-        Console.Write($"{sourceDate:yyyy-MM-dd HH:mm:ss} {FormatFileSize(sourceInfo.Length)} >> ");
+        Console.Write($"{sourceDate:yyyy-MM-dd HH:mm:ss} {FormatFileSize(sourceLength)} >> ");
         if (targetExists && targetDate > sourceDate)
         {
             Console.ForegroundColor = ConsoleColor.Red;
         }
-        Console.WriteLine($"{targetDate:yyyy-MM-dd HH:mm:ss} {FormatFileSize(targetInfo.Length)}");
+        Console.WriteLine($"{targetDate:yyyy-MM-dd HH:mm:ss} {FormatFileSize(targetLength)}");
+        Console.WriteLine();
         Console.ForegroundColor = previousColor;
     }
 
