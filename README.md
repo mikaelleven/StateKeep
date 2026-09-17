@@ -49,7 +49,9 @@ The installer downloads and SHA-256 verifies the latest GitHub release, installs
 Run setup once. The folder can be any writable location; a cloud-synchronized folder or NAS directory makes backups available on other computers.
 
 ```powershell
-statekeep setup "%ONEDRIVE%\MyBackups"
+statekeep setup "%ONEDRIVE%\MyBackups" # Special folder alias for OneDrive
+statekeep setup . # Use current directory
+statekeep setup "C:\MyBackups" # Explicit path
 statekeep validate
 ```
 
