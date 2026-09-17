@@ -40,6 +40,41 @@ dotnet run --project src\StateKeep\StateKeep.csproj -- --help
 
 The project is currently configured as a class library and does not yet contain an executable entry point, so the command above will fail until the application project is changed to an executable and a `Program.cs` entry point is added.
 
+## Building and releasing
+
+### Build a local release
+
+Create a self-contained Windows x64 release ZIP and install it locally without publishing:
+
+```cmd
+release.cmd --local --no-publish
+```
+
+This increments the build version in `version.json` and creates
+`releases\StateKeep-<version>-win-x64.zip`. The ZIP contains the runtime
+executable and bundled application definitions, but excludes source and build
+scripts.
+
+### Publish a release
+
+`release.cmd` publishes by default. Install and authenticate the GitHub CLI
+before publishing:
+
+```powershell
+gh auth login
+release.cmd --patch
+```
+
+The script increments the selected version component (or the build component by
+default), creates the release ZIP and SHA-256 checksum, commits `version.json`,
+tags the commit as `v<version>`, pushes it, and creates the GitHub release.
+
+To protect release integrity, publishing stops if the working tree has
+uncommitted changes outside `version.json`. An existing change to `version.json`
+is allowed and becomes the base for the requested version bump. The GitHub
+Actions **Release** workflow provides the equivalent process from GitHub; select
+the version component when starting the workflow.
+
 ## Development conventions
 
 - Use deterministic support scripts for repeatable setup and validation.
