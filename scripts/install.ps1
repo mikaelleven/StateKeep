@@ -58,12 +58,38 @@ finally {
 }
 
 if (-not $NoPathUpdate) {
+    $canonicalInstallPath = [System.IO.Path]::GetFullPath($InstallPath).TrimEnd('\', '/')
     $userPath = [Environment]::GetEnvironmentVariable('Path', 'User')
-    $pathEntries = @($userPath -split ';' | Where-Object { $_ })
-    if ($pathEntries -notcontains $InstallPath) {
-        [Environment]::SetEnvironmentVariable('Path', (($pathEntries + $InstallPath) -join ';'), 'User')
-        $env:Path = "$env:Path;$InstallPath"
-        Write-Host 'Added StateKeep to your user PATH. Open a new terminal to use it everywhere.'
+    $pathEntries = @($userPath -split ';' | ForEach-Object { $_.Trim().Trim('"') } | Where-Object { $_ })
+    $pathAlreadyRegistered = $pathEntries | Where-Object {
+        try {
+            $entry = [System.IO.Path]::GetFullPath($_).TrimEnd('\', '/')
+            [StringComparer]::OrdinalIgnoreCase.Equals($entry, $canonicalInstallPath)
+        }
+        catch {
+            $false
+        }
+    }
+    if ($null -eq $pathAlreadyRegistered) {
+        $pathEntries += $canonicalInstallPath
+        [Environment]::SetEnvironmentVariable('Path', ($pathEntries -join ';'), 'User')
+        Write-Host "Added StateKeep to your user PATH: $canonicalInstallPath"
+    }
+
+    # Make the command available in the installer process as well as new terminals.
+    $processEntries = @($env:Path -split ';' | Where-Object { $_ })
+    $processPathRegistered = $processEntries | Where-Object {
+        try {
+            [StringComparer]::OrdinalIgnoreCase.Equals(
+                [System.IO.Path]::GetFullPath($_.Trim().Trim('"')).TrimEnd('\', '/'),
+                $canonicalInstallPath)
+        }
+        catch {
+            $false
+        }
+    }
+    if ($null -eq $processPathRegistered) {
+        $env:Path = (($processEntries + $canonicalInstallPath) -join ';')
     }
 }
 

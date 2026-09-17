@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import shutil
 import subprocess
 import sys
@@ -40,6 +41,25 @@ def ensure_publish_ready() -> None:
     auth = subprocess.run(["gh", "auth", "status"], cwd=ROOT, capture_output=True, text=True, check=False)
     if auth.returncode:
         raise RuntimeError("GitHub CLI is not authenticated. Run 'gh auth login' before publishing.")
+
+
+def add_to_user_path(path: Path) -> None:
+    """Add path to the Windows user PATH without duplicating equivalent entries."""
+    import winreg
+
+    path_text = str(path)
+    canonical = os.path.normcase(os.path.normpath(path_text.rstrip("\\/")))
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r"Environment", 0, winreg.KEY_READ | winreg.KEY_WRITE) as key:
+        try:
+            current, value_type = winreg.QueryValueEx(key, "Path")
+        except FileNotFoundError:
+            current, value_type = "", winreg.REG_EXPAND_SZ
+        entries = [entry for entry in str(current).split(";") if entry.strip()]
+        if not any(os.path.normcase(os.path.normpath(entry.strip().strip('"').rstrip("\\/"))) == canonical for entry in entries):
+            entries.append(path_text)
+            winreg.SetValueEx(key, "Path", 0, value_type, ";".join(entries))
+            print(f"Added StateKeep to your user PATH: {path_text}")
+        os.environ["PATH"] = ";".join(entries)
 
 
 def publish(version: str, archive: Path, checksum: Path) -> None:
@@ -101,6 +121,7 @@ def main() -> int:
         install_dir = Path.home() / "AppData" / "Local" / "StateKeep"
         shutil.rmtree(install_dir, ignore_errors=True)
         shutil.copytree(publish_dir, install_dir)
+        add_to_user_path(install_dir)
         print(f"Installed locally: {install_dir}")
 
     print(f"Created release artifact: {archive}")
