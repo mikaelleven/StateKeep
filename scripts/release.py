@@ -12,7 +12,7 @@ ROOT = Path(__file__).resolve().parents[1]
 PROJECT = ROOT / "src" / "StateKeep" / "StateKeep.csproj"
 RELEASES = ROOT / "releases"
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from version import bump, load  # noqa: E402
+from version import bump, load
 
 
 def version_text(version: dict[str, int]) -> str:
@@ -24,12 +24,17 @@ def run(command: list[str]) -> None:
     subprocess.run(command, cwd=ROOT, check=True)
 
 
-def ensure_clean_worktree() -> None:
+def ensure_publish_ready() -> None:
     result = subprocess.run(
         ["git", "status", "--porcelain"], cwd=ROOT, check=True, capture_output=True, text=True
     )
     if result.stdout.strip():
         raise RuntimeError("Refusing to publish from a working tree with uncommitted changes.")
+    if shutil.which("gh") is None:
+        raise RuntimeError("GitHub CLI (gh) is required to publish a release. Install it from https://cli.github.com/.")
+    auth = subprocess.run(["gh", "auth", "status"], cwd=ROOT, capture_output=True, text=True, check=False)
+    if auth.returncode:
+        raise RuntimeError("GitHub CLI is not authenticated. Run 'gh auth login' before publishing.")
 
 
 def publish(version: str, archive: Path, checksum: Path) -> None:
@@ -51,14 +56,15 @@ def main() -> int:
     for part in ("major", "minor", "patch", "build"):
         bump_group.add_argument(f"--{part}", action="store_const", dest="bump_part", const=part)
     parser.add_argument("--local", action="store_true", help="Install the packaged release locally.")
-    parser.add_argument("--publish", action="store_true", help="Commit, tag, push, and create a GitHub release.")
+    parser.add_argument("--publish", action="store_true", default=True, help="Publish the release (the default).")
+    parser.add_argument("--no-publish", action="store_false", dest="publish", help="Create artifacts without publishing them.")
     parser.add_argument("--nobump", action="store_true", help="Package the current version without changing it.")
     args = parser.parse_args()
 
     if args.publish and args.nobump:
         parser.error("--publish cannot be used with --nobump.")
     if args.publish:
-        ensure_clean_worktree()
+        ensure_publish_ready()
 
     version = load() if args.nobump else bump(args.bump_part or "build")
     version = version_text(version)

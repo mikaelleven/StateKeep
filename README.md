@@ -52,10 +52,10 @@ download `install.ps1` and invoke it with `-InstallPath` or `-NoPathUpdate`.
 ### Build a local release
 
 Developers can create a self-contained Windows x64 release ZIP and install it
-locally with one command:
+locally without publishing it:
 
 ```cmd
-release.cmd --local
+release.cmd --local --no-publish
 ```
 
 This increments the build version in `version.json` and creates
@@ -63,10 +63,19 @@ This increments the build version in `version.json` and creates
 executable and bundled application definitions; it excludes source and build
 scripts.
 
-Project maintainers publish a version from GitHub’s **Actions → Release → Run
-workflow** page. Select the semantic version component to increment; the
-workflow builds the release, commits the version update, tags it as
-`v<version>`, and creates the GitHub release with the ZIP and SHA-256 checksum.
+Running `release.cmd` publishes a release by default. It requires the GitHub
+CLI to be installed and authenticated first:
+
+```powershell
+gh auth login
+release.cmd --patch
+```
+
+It increments the requested version component (or the build component by
+default), builds the release, commits the version update, tags it as
+`v<version>`, pushes it, and creates the GitHub release with the ZIP and
+SHA-256 checksum. The GitHub Actions **Release** workflow provides the same
+process from GitHub; select the version component when starting the workflow.
 
 ## Restore
 
