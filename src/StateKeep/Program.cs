@@ -1543,6 +1543,7 @@ internal static class Program
         }
 
         var computerName = requestedComputer ?? Environment.MachineName;
+        var deviceId = requestedComputer is null ? EnsureDeviceId() : null;
         string? backupDevice = null;
         var configuration = ReadConfiguration(GetConfigPath());
         if (configuration.Exists && !string.IsNullOrWhiteSpace(configuration.BackupPath))
@@ -1552,15 +1553,24 @@ internal static class Program
             if (backupDevice is not null)
             {
                 var deviceFolderName = Path.GetFileName(backupDevice);
-                computerName = deviceFolderName[..deviceFolderName.LastIndexOf('_')];
+                var separatorIndex = deviceFolderName.LastIndexOf('_');
+                if (separatorIndex > 0 && separatorIndex < deviceFolderName.Length - 1)
+                {
+                    computerName = deviceFolderName[..separatorIndex];
+                    deviceId = deviceFolderName[(separatorIndex + 1)..];
+                }
             }
         }
 
-        Console.WriteLine($"Applications on {computerName}:");
+        Console.WriteLine($"Applications on {computerName} [{deviceId}]:");
+        Console.WriteLine();
         const int statusColumnWidth = 8;
+        var idColumnWidth = Math.Max("Id".Length, applications.Max(application => application.Id.Length)) + 2;
+        var nameColumnWidth = Math.Max("Name".Length, applications.Max(application => application.Name.Length));
         Console.Write("Local".PadRight(statusColumnWidth));
         Console.Write("Backup".PadRight(statusColumnWidth));
-        Console.WriteLine("Name");
+        Console.Write("Id".PadRight(idColumnWidth));
+        Console.WriteLine("Name".PadRight(nameColumnWidth));
         foreach (var application in applications)
         {
             var local = application.Roots.Any(root => root.Paths
@@ -1581,6 +1591,7 @@ internal static class Program
 
             WriteStatusColumn(local, statusColumnWidth);
             WriteStatusColumn(backup, statusColumnWidth);
+            Console.Write(application.Id.PadRight(idColumnWidth));
             Console.WriteLine(application.Name);
         }
 
