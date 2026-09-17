@@ -18,9 +18,6 @@ StateKeep stores ordinary files rather than proprietary archives or databases, s
 
 ### Install the latest release
 
-> [!WARNING]
-> This one-liner downloads and executes the installer directly from GitHub. Review the [installer script](https://raw.githubusercontent.com/mikaelleven/StateKeep/main/scripts/install.ps1) before running it, and run it only if you trust the source and its release process.
-
 Open PowerShell and run:
 
 ```powershell
@@ -29,6 +26,10 @@ irm https://raw.githubusercontent.com/mikaelleven/StateKeep/main/scripts/install
 
 The installer downloads and SHA-256 verifies the latest GitHub release, installs it to `%LOCALAPPDATA%\StateKeep`, and adds that folder to your user `PATH`. Open a new terminal when it finishes.
 
+> [!WARNING]
+> This one-liner downloads and executes the installer directly from GitHub. Review the [installer script](https://raw.githubusercontent.com/mikaelleven/StateKeep/main/scripts/install.ps1) before running it, and run it only if you trust the source and its release process.
+
+
 ## Basic usage
 
 ### 1. Choose a backup folder
@@ -36,7 +37,7 @@ The installer downloads and SHA-256 verifies the latest GitHub release, installs
 Run setup once. The folder can be any writable location; a cloud-synchronized folder or NAS directory makes backups available on other computers.
 
 ```powershell
-statekeep setup "$env:OneDrive\MyBackups"
+statekeep setup "%ONEDRIVE%\MyBackups"
 statekeep validate
 ```
 
