@@ -1051,7 +1051,10 @@ internal static class Program
                         var identical = targetExists && FilesAreIdentical(file, target);
                         if (identical)
                         {
-                            WriteRestoreEntry(relative, file, target, '=', arguments, sourceLength, sourceDate);
+                            if (arguments.Verbose)
+                            {
+                                WriteRestoreEntry(relative, file, target, '=', arguments, sourceLength, sourceDate);
+                            }
                             continue;
                         }
 
@@ -1220,6 +1223,7 @@ internal static class Program
             return;
         }
 
+        var sourceExists = File.Exists(source);
         var targetInfo = new FileInfo(target);
         var targetExists = targetInfo.Exists;
         var targetLength = targetExists ? targetInfo.Length : 0;
@@ -1238,12 +1242,28 @@ internal static class Program
         Console.Write("\u001b[22m");
 
         Console.ForegroundColor = ConsoleColor.Gray;
-        Console.Write($"{sourceDate:yyyy-MM-dd HH:mm:ss} {FormatFileSize(sourceLength)} >> ");
-        if (targetExists && targetDate > sourceDate)
+        if (sourceExists)
         {
-            Console.ForegroundColor = ConsoleColor.Red;
+            Console.Write($"{sourceDate:yyyy-MM-dd HH:mm:ss} {FormatFileSize(sourceLength)}");
         }
-        Console.WriteLine($"{targetDate:yyyy-MM-dd HH:mm:ss} {FormatFileSize(targetLength)}");
+        else
+        {
+            Console.Write("-");
+        }
+        Console.Write(" >> ");
+        if (targetExists)
+        {
+            if (targetDate > sourceDate)
+            {
+                Console.ForegroundColor = ConsoleColor.Red;
+            }
+            Console.Write($"{targetDate:yyyy-MM-dd HH:mm:ss} {FormatFileSize(targetLength)}");
+        }
+        else
+        {
+            Console.Write("-");
+        }
+        Console.WriteLine();
         Console.WriteLine();
         Console.ForegroundColor = previousColor;
     }
