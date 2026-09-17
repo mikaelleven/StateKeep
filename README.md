@@ -75,9 +75,9 @@ Example backup destination:
 
 ## Documentation
 
-- [ARCHITECTURE.md](ARCHITECTURE.md) — system architecture and design decisions
-- [REQUIREMENTS.md](REQUIREMENTS.md) — functional and non-functional requirements
-- [APP-CONFIG-SPEC.md](APP-CONFIG-SPEC.md) — per-application definition format
-- [CLI-SPEC.md](CLI-SPEC.md) — command-line interface and output behavior
-- [RESTORE-SAFETY.md](RESTORE-SAFETY.md) — conflict handling and restore semantics
-- [SCHEDULING.md](SCHEDULING.md) — scheduled task installation and silent execution
+- [ARCHITECTURE.md](docs/ARCHITECTURE.md) — system architecture and design decisions
+- [REQUIREMENTS.md](docs/REQUIREMENTS.md) — functional and non-functional requirements
+- [APP-CONFIG-SPEC.md](docs/APP-CONFIG-SPEC.md) — per-application definition format
+- [CLI-SPEC.md](docs/CLI-SPEC.md) — command-line interface and output behavior
+- [RESTORE-SAFETY.md](docs/RESTORE-SAFETY.md) — conflict handling and restore semantics
+- [SCHEDULING.md](docs/SCHEDULING.md) — scheduled task installation and silent execution

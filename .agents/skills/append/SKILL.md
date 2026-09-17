@@ -1,6 +1,6 @@
 ---
 name: append
-description: Add or update a StateKeep application YAML definition for /append <application>, following APP-CONFIG-SPEC.md, checking for duplicate IDs, and validating root determinism and evidence requirements.
+description: Add or update a StateKeep application YAML definition for /append <application>, following docs/APP-CONFIG-SPEC.md, checking for duplicate IDs, and validating root determinism and evidence requirements.
 ---
 
 # Append an application configuration
@@ -9,7 +9,7 @@ Use this skill when the user invokes `/append <application>` or asks to add a bu
 
 ## Workflow
 
-1. Read `APP-CONFIG-SPEC.md` before making changes. Treat it as the source of truth for the YAML schema, path semantics, evidence predicates, and filtering rules.
+1. Read `docs/APP-CONFIG-SPEC.md` before making changes. Treat it as the source of truth for the YAML schema, path semantics, evidence predicates, and filtering rules.
 2. Interpret the argument as the human-readable application to add. If it is missing or ambiguous, ask for clarification rather than guessing.
 3. Look up the application's current Windows storage locations online before finalizing the config. Prefer official vendor documentation or reliable technical documentation. Verify product name, roaming/local location, profile layout, and which files are relevant. Tell the user when online details could not be verified.
 4. Inspect `apps/` and derive a stable ID using lowercase ASCII and only `a-z`, `0-9`, and `-`. Search all existing YAML definitions for that ID before creating anything.

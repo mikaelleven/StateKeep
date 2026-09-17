@@ -3,3 +3,9 @@
 releases/
 __pycache__/
 *.py[cod]
+
+# Compiled and packaged executables
+*.exe
+*.dll
+*.pdb
+*.msi

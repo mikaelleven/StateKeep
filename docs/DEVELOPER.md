@@ -48,4 +48,4 @@ The project is currently configured as a class library and does not yet contain 
 
 ## Architecture
 
-See `ARCHITECTURE.md` for architectural rationale and constraints.
+See `docs/ARCHITECTURE.md` for architectural rationale and constraints.
