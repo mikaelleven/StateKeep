@@ -16,6 +16,18 @@ StateKeep stores ordinary files rather than proprietary archives or databases, s
 
 ## Installation
 
+### Prerequisites
+
+To install the official release, you need:
+
+- 64-bit Windows;
+- Windows PowerShell, which is included with supported Windows versions; and
+- an internet connection that can reach GitHub to download the installer and release.
+
+No separate dependencies need to be installed. The official release is
+self-contained and includes its .NET runtime; you do **not** need the .NET
+runtime or SDK, Python, GitHub CLI, or administrator privileges.
+
 ### Install the latest release
 
 Open PowerShell and run:
