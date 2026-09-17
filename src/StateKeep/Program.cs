@@ -1221,30 +1221,49 @@ internal static class Program
         var targetDate = targetExists ? targetInfo.LastWriteTime : sourceDate;
         var previousColor = Console.ForegroundColor;
 
-        if (action == '=')
-        {
-            Console.ForegroundColor = ConsoleColor.DarkGray;
-        }
-        Console.WriteLine(relative);
-        SetRestoreActionColor(action);
-        Console.Write($"{action}: {sourceInfo.Length:N0} bytes {sourceDate:yyyy-MM-dd HH:mm:ss} >> ");
-        if (targetExists && targetDate > sourceDate)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-        }
-        Console.WriteLine($"{targetInfo.Length:N0} bytes {targetDate:yyyy-MM-dd HH:mm:ss}");
-        Console.ForegroundColor = previousColor;
-    }
-
-    private static void SetRestoreActionColor(char action)
-    {
         Console.ForegroundColor = action switch
         {
             '!' => ConsoleColor.DarkYellow,
             '+' => ConsoleColor.Green,
             '=' => ConsoleColor.DarkGray,
-            _ => Console.ForegroundColor
+            _ => previousColor
         };
+        Console.Write("\u001b[1m");
+        Console.WriteLine($"{action} {relative}");
+        Console.Write("\u001b[22m");
+
+        Console.ForegroundColor = ConsoleColor.Gray;
+        Console.Write($"{sourceDate:yyyy-MM-dd HH:mm:ss} {FormatFileSize(sourceInfo.Length)} >> ");
+        if (targetExists && targetDate > sourceDate)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+        }
+        Console.WriteLine($"{targetDate:yyyy-MM-dd HH:mm:ss} {FormatFileSize(targetInfo.Length)}");
+        Console.ForegroundColor = previousColor;
+    }
+
+    private static string FormatFileSize(long bytes)
+    {
+        const double unit = 1024;
+        if (bytes < unit)
+        {
+            return $"{bytes} B";
+        }
+
+        var value = bytes / unit;
+        var suffix = "K";
+        if (value >= unit)
+        {
+            value /= unit;
+            suffix = "M";
+        }
+        if (value >= unit)
+        {
+            value /= unit;
+            suffix = "G";
+        }
+
+        return $"{value:0.#} {suffix}";
     }
 
     private static void RemoveObsoleteBackupFiles(string destination, ISet<string> selectedRelativePaths)
