@@ -28,8 +28,13 @@ def ensure_publish_ready() -> None:
     result = subprocess.run(
         ["git", "status", "--porcelain"], cwd=ROOT, check=True, capture_output=True, text=True
     )
-    if result.stdout.strip():
-        raise RuntimeError("Refusing to publish from a working tree with uncommitted changes.")
+    changed_paths = [line[3:] for line in result.stdout.splitlines()]
+    unexpected_changes = [path for path in changed_paths if path != "version.json"]
+    if unexpected_changes:
+        raise RuntimeError(
+            "Refusing to publish with uncommitted changes outside version.json: "
+            + ", ".join(unexpected_changes)
+        )
     if shutil.which("gh") is None:
         raise RuntimeError("GitHub CLI (gh) is required to publish a release. Install it from https://cli.github.com/.")
     auth = subprocess.run(["gh", "auth", "status"], cwd=ROOT, capture_output=True, text=True, check=False)

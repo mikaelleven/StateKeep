@@ -74,8 +74,11 @@ release.cmd --patch
 It increments the requested version component (or the build component by
 default), builds the release, commits the version update, tags it as
 `v<version>`, pushes it, and creates the GitHub release with the ZIP and
-SHA-256 checksum. The GitHub Actions **Release** workflow provides the same
-process from GitHub; select the version component when starting the workflow.
+SHA-256 checksum. An existing uncommitted change to `version.json` is allowed
+and becomes the base for the selected bump; other uncommitted changes stop the
+publish to prevent releasing uncommitted source. The GitHub Actions **Release**
+workflow provides the same process from GitHub; select the version component
+when starting the workflow.
 
 ## Restore
 
