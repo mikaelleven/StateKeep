@@ -24,13 +24,13 @@ Repeated execution shall:
 
 ## 3. Scheduled action
 
-Recommended scheduled action:
+The scheduled action launches Windows PowerShell with its window hidden, and PowerShell invokes StateKeep silently:
 
 ```powershell
-statekeep.exe backup --silent
+powershell.exe -NoProfile -NonInteractive -WindowStyle Hidden -Command "& 'C:\\Users\\...\\StateKeep\\statekeep.exe' backup --silent"
 ```
 
-The configured executable path should be absolute when registered with Task Scheduler.
+This keeps the installed executable as a normal console application for interactive CLI use while ensuring automatic backups do not display a terminal window. The configured executable path should be absolute when registered with Task Scheduler.
 
 ## 4. Task identity
 
