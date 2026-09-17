@@ -147,7 +147,7 @@ internal static class Program
         Console.WriteLine("  tmextract [profile|chrome|brave] [target]  Extract Tampermonkey scripts");
         Console.WriteLine("  restore <app> [--from <device>]  Restore one application");
         Console.WriteLine("  restore --all [--from <device>]  Restore all applications");
-        Console.WriteLine("  apps list          List known applications");
+        Console.WriteLine("  apps list [computer]  List application status");
         Console.WriteLine("  apps open          Open the installed apps folder");
         Console.WriteLine("  open <app>         Open the first detected application root");
         Console.WriteLine("  status             Show current status and configuration");
@@ -1467,7 +1467,14 @@ internal static class Program
         var subcommand = arguments.Positionals.Skip(1).FirstOrDefault();
         if (string.Equals(subcommand, "list", StringComparison.OrdinalIgnoreCase))
         {
-            return ListApplications();
+            var requestedComputer = arguments.Positionals.Skip(2).FirstOrDefault();
+            if (arguments.Positionals.Skip(2).Skip(1).Any())
+            {
+                WriteError("Only one computer name or device ID may be specified. Usage: statekeep apps list [<computer-name|device-id>]");
+                return UsageError;
+            }
+
+            return ListApplications(requestedComputer);
         }
 
         if (string.Equals(subcommand, "open", StringComparison.OrdinalIgnoreCase))
@@ -1505,7 +1512,7 @@ internal static class Program
         }
     }
 
-    private static int ListApplications()
+    private static int ListApplications(string? requestedComputer)
     {
         var appsDirectory = Path.Combine(AppContext.BaseDirectory, "apps");
         if (!Directory.Exists(appsDirectory))
@@ -1516,7 +1523,7 @@ internal static class Program
 
         var applications = Directory.EnumerateFiles(appsDirectory, "*.yaml")
             .Concat(Directory.EnumerateFiles(appsDirectory, "*.yml"))
-            .Select(ReadApplicationDefinition)
+            .Select(ReadBackupDefinition)
             .OrderBy(application => application.Id, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -1526,13 +1533,63 @@ internal static class Program
             return Success;
         }
 
-        Console.WriteLine("Known applications:");
+        var computerName = requestedComputer ?? Environment.MachineName;
+        string? backupDevice = null;
+        var configuration = ReadConfiguration(GetConfigPath());
+        if (configuration.Exists && !string.IsNullOrWhiteSpace(configuration.BackupPath))
+        {
+            var backupBasePath = Environment.ExpandEnvironmentVariables(configuration.BackupPath);
+            backupDevice = FindRestoreDevice(backupBasePath, requestedComputer);
+            if (backupDevice is not null)
+            {
+                var deviceFolderName = Path.GetFileName(backupDevice);
+                computerName = deviceFolderName[..deviceFolderName.LastIndexOf('_')];
+            }
+        }
+
+        Console.WriteLine($"Applications on {computerName}:");
+        const int statusColumnWidth = 8;
+        Console.Write("Local".PadRight(statusColumnWidth));
+        Console.Write("Backup".PadRight(statusColumnWidth));
+        Console.WriteLine("Name");
         foreach (var application in applications)
         {
-            Console.WriteLine($"  {application.Id,-16} {application.Name}");
+            var local = application.Roots.Any(root => root.Paths
+                .Select(Environment.ExpandEnvironmentVariables)
+                .Any(path => Directory.Exists(path) && EvidenceMatches(path, root.Evidence)));
+            var backup = backupDevice is not null && application.Roots.Any(root =>
+            {
+                var path = application.Roots.Count == 1
+                    ? Path.Combine(backupDevice, application.Id)
+                    : Path.Combine(backupDevice, application.Id, root.Name);
+                return Directory.Exists(path) && Directory.EnumerateFiles(path, "*", new EnumerationOptions
+                {
+                    RecurseSubdirectories = true,
+                    IgnoreInaccessible = true,
+                    AttributesToSkip = FileAttributes.ReparsePoint
+                }).Any();
+            });
+
+            WriteStatusColumn(local, statusColumnWidth);
+            WriteStatusColumn(backup, statusColumnWidth);
+            Console.WriteLine(application.Name);
         }
 
         return Success;
+    }
+
+    private static void WriteStatusColumn(bool present, int width)
+    {
+        WriteStatus(present);
+        Console.Write(new string(' ', width - 1));
+    }
+
+    private static void WriteStatus(bool present)
+    {
+        var previousColor = Console.ForegroundColor;
+        Console.ForegroundColor = present ? ConsoleColor.Green : ConsoleColor.Red;
+        Console.Write(present ? "✓" : "✗");
+        Console.ForegroundColor = previousColor;
     }
 
     private static ApplicationDefinition ReadApplicationDefinition(string path)
