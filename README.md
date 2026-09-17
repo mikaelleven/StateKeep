@@ -73,6 +73,10 @@ Example backup destination:
 %ONEDRIVE%\MyBackups\DESKTOP_A7K3M9Q2\apps\...
 ```
 
+## License
+
+StateKeep is distributed under the [MIT License](LICENSE).
+
 ## Documentation
 
 - [ARCHITECTURE.md](docs/ARCHITECTURE.md) — system architecture and design decisions
