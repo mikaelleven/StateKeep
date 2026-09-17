@@ -200,6 +200,7 @@ internal static class Program
 
         try
         {
+            backupPath = ResolveSetupPath(backupPath);
             Directory.CreateDirectory(Path.GetDirectoryName(configPath)!);
             var deviceId = EnsureDeviceId();
             File.WriteAllText(configPath, $"version: 1{Environment.NewLine}backupPath: {QuoteYamlValue(backupPath)}{Environment.NewLine}");
@@ -212,6 +213,14 @@ internal static class Program
             WriteError($"Could not write configuration: {exception.Message}");
             return UsageError;
         }
+    }
+
+    private static string ResolveSetupPath(string path)
+    {
+        var expandedPath = Environment.ExpandEnvironmentVariables(path.Trim());
+        return Path.IsPathFullyQualified(expandedPath)
+            ? path.Trim()
+            : Path.GetFullPath(expandedPath);
     }
 
     private static string GetStateDirectory() => Path.Combine(
