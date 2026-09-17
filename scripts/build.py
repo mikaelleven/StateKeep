@@ -23,7 +23,13 @@ def main() -> int:
 
     requested = [name for name in ("major", "minor", "patch", "build") if getattr(args, name)]
     version = bump(requested[0]) if requested else bump("build")
-    command = ["dotnet", "build", str(PROJECT), *passthrough, "/p:VersionBumpHandled=true"]
+    version_text = "{major}.{minor}.{patch}.{build}".format(**version)
+    command = [
+        "dotnet", "build", str(PROJECT), *passthrough,
+        f"/p:Version={version_text}",
+        f"/p:InformationalVersion={version_text}",
+        "/p:VersionBumpHandled=true",
+    ]
     if args.verbose:
         print(f"Version: {version['major']}.{version['minor']}.{version['patch']}.{version['build']}")
         print("Command: " + " ".join(command))

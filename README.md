@@ -26,6 +26,48 @@ statekeep restore vscode
 statekeep install task
 ```
 
+## Installation
+
+### Install the latest release
+
+Open PowerShell and run:
+
+```powershell
+irm https://raw.githubusercontent.com/mikaelleven/StateKeep/main/scripts/install.ps1 | iex
+```
+
+The installer downloads and SHA-256 verifies the latest GitHub release, extracts it to
+`%LOCALAPPDATA%\StateKeep`, and adds that folder to your user `PATH`. Open a
+new terminal afterwards, then configure a cloud-synchronized backup location:
+
+```powershell
+statekeep setup "$env:OneDrive\MyBackups"
+statekeep validate
+```
+
+Run `statekeep --help` to see all commands. Re-run the installer to update an
+existing installation. To install somewhere else or leave `PATH` unchanged,
+download `install.ps1` and invoke it with `-InstallPath` or `-NoPathUpdate`.
+
+### Build a local release
+
+Developers can create a self-contained Windows x64 release ZIP and install it
+locally with one command:
+
+```cmd
+release.cmd --local
+```
+
+This increments the build version in `version.json` and creates
+`releases\StateKeep-<version>-win-x64.zip`. The ZIP contains only the runtime
+executable and bundled application definitions; it excludes source and build
+scripts.
+
+Project maintainers publish a version from GitHub’s **Actions → Release → Run
+workflow** page. Select the semantic version component to increment; the
+workflow builds the release, commits the version update, tags it as
+`v<version>`, and creates the GitHub release with the ZIP and SHA-256 checksum.
+
 ## Restore
 
 Restore one application from this computer's backup folder:
