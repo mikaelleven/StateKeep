@@ -1,0 +1,16 @@
+version: 1
+id: windows-terminal
+name: Windows Terminal
+
+roots:
+  - name: settings
+    path:
+      - "%LOCALAPPDATA%\\Packages\\Microsoft.WindowsTerminal_8wekyb3d8bbwe\\LocalState"
+      - "%LOCALAPPDATA%\\Packages\\Microsoft.WindowsTerminalPreview_8wekyb3d8bbwe\\LocalState"
+      - "%LOCALAPPDATA%\\Microsoft\\Windows Terminal"
+    evidence:
+      any:
+        - file: "settings.json"
+
+include:
+  - "settings.json"
