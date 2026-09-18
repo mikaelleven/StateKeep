@@ -1,0 +1,17 @@
+version: 1
+id: flow-launcher
+name: Flow Launcher
+
+roots:
+  - name: user-data
+    path: "%APPDATA%\\FlowLauncher"
+    evidence:
+      any:
+        - directory: "Settings"
+        - directory: "Plugins"
+        - directory: "Themes"
+
+include:
+  - "Settings/**"
+  - "Plugins/**"
+  - "Themes/**"
